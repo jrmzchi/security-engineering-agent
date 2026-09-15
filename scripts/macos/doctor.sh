@@ -14,6 +14,20 @@ set -uo pipefail
 
 BASH_VER_NUM=$(( ${BASH_VERSINFO[0]:-0} * 100 + ${BASH_VERSINFO[1]:-0} ))
 if [ "$BASH_VER_NUM" -lt 404 ]; then
+    # Stock macOS ships Bash 3.2; Homebrew's bash is commonly installed
+    # but not first on PATH (or the user hasn't opened a new shell since
+    # installing it). Try the two standard Homebrew prefixes and
+    # transparently re-exec under a newer bash before giving up - this
+    # automates exactly what the error message below already tells the
+    # user to do by hand.
+    for candidate in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+        if [ -x "$candidate" ]; then
+            cand_num="$("$candidate" -c 'echo $(( BASH_VERSINFO[0]*100 + BASH_VERSINFO[1] ))' 2>/dev/null)"
+            if [ -n "${cand_num:-}" ] && [ "$cand_num" -ge 404 ]; then
+                exec "$candidate" "$0" "$@"
+            fi
+        fi
+    done
     echo "This script requires Bash 4.4 or later (found: ${BASH_VERSION:-unknown})." >&2
     echo "macOS ships Bash 3.2 by default (this script needs 4.4+ for" >&2
     echo "associative arrays and safe handling of empty arrays under set -u)." >&2

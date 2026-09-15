@@ -71,6 +71,48 @@ Scanner output remains **candidate evidence**, never confirmed
 vulnerability evidence, regardless of which scanner or how it was
 selected — see `plays/finding-validation.md`.
 
+## TARGETED domain-driven tool selection
+
+`scripts/windows/scan.ps1`'s `-Domains` and `scripts/macos/scan.sh`'s
+`--domains` flag take one or more of the 10 domain names in
+`skills/security-review/SKILL.md`'s "Where to look next" table
+(`authorization`, `file-security`, etc. — not every `plays/*.md`
+basename has a corresponding domain here) and restrict which scanner
+*tools* actually run to this mapping, the authoritative table both
+scripts implement:
+
+```text
+Domain                   Tool(s) that run
+------------------------ --------------------------------------------
+code-review              Semgrep
+web-security             Semgrep
+api-security             Semgrep
+authentication           Semgrep
+authorization            Semgrep
+data-security            Semgrep
+file-security            Semgrep
+configuration-security   Semgrep, Trivy
+secrets-security         Gitleaks
+dependency-security      OSV-Scanner, ecosystem-native audit
+                         (dotnet list package / npm audit /
+                         pip-audit — still individually gated by
+                         ecosystem detection, as before)
+```
+
+A tool runs if *any* selected domain maps to it. When `-Domains`/
+`--domains` is omitted entirely, behavior is unchanged from before this
+flag existed: every applicable tool still runs — this is what QUICK/
+STANDARD/DEEP and an explicit "scan this" request get. The domain flag
+exists for TARGETED specifically: `skills/security-change-detection`'s
+classification output (the domains it identified for the current
+change) feeds directly into it.
+
+A tool this mapping excludes for the current call is recorded under the
+scan summary's `toolSelection.skippedTools`, with the reason "not
+relevant to current change (domains: ...)" — distinct from
+`coverageGaps`, which is reserved for a tool that *was* relevant but
+unavailable or failed.
+
 ## Reusing evidence instead of re-scanning
 
 If a scan already ran against the current repository state and covers

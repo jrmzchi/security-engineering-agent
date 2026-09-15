@@ -104,6 +104,15 @@ findings counts and coverage gaps:
   "toolVersions": {
     "semgrep": "1.x.x", "gitleaks": "8.x.x",
     "osv-scanner": "1.x.x", "trivy": "0.x.x"
+  },
+  "toolSelection": {
+    "domains": ["authorization"],
+    "selectedTools": ["semgrep"],
+    "skippedTools": {
+      "gitleaks": "not relevant to current change (domains: authorization)",
+      "osv-scanner": "not relevant to current change (domains: authorization)",
+      "trivy": "not relevant to current change (domains: authorization)"
+    }
   }
 }
 ```
@@ -114,7 +123,16 @@ at scan time. `mode` records which review mode (see
 `plays/code-review.md`) the scan was run under — pass it explicitly
 (`-Mode`/`--mode`) when known; it otherwise defaults to `TARGETED` for
 a diff-scoped scan or `STANDARD` for a full-tree one. `toolVersions`
-entries are `null` for any tool not installed. See
+entries are `null` for any tool not installed. `toolSelection` reflects
+`-Domains`/`--domains` (see `plays/scanner-selection.md`'s "TARGETED
+domain-driven tool selection"): `domains`/`selectedTools` are `null`
+when the flag was omitted (every applicable tool ran, same as before
+this field existed), and `skippedTools` is empty in that case.
+`selectedTools` uses the group name `ecosystem-native` (matching the
+mapping table), but a *skipped* native tool is recorded individually as
+`dotnet-list-package`/`npm-audit`/`pip-audit` — only for whichever
+ecosystem is actually present, so `ecosystem-native` itself never
+appears as a `skippedTools` key. See
 `plays/scanner-selection.md`'s "Reusing evidence instead of
 re-scanning" for how `gitCommit`/`dirty` are meant to be used to decide
 whether a prior scan is still applicable.

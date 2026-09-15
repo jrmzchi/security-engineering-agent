@@ -25,22 +25,36 @@
 .PARAMETER DiffBase
     Git ref to diff against when -DiffOnly is used. Default: HEAD.
 .PARAMETER Mode
-    Review mode this scan is being run under (QUICK/STANDARD/DEEP/
-    TARGETED - see plays/code-review.md and plays/scanner-selection.md).
-    Recorded in the scan metadata only; does not change scanner
-    behavior. Defaults to TARGETED when -DiffOnly is set, STANDARD
-    otherwise.
+    Review mode this scan is being run under. Must be one of QUICK,
+    STANDARD, DEEP, TARGETED (case-insensitive) - see
+    plays/code-review.md and plays/scanner-selection.md. Recorded in the
+    scan metadata; an invalid value is rejected (exit 3) rather than
+    silently accepted. Defaults to TARGETED when -DiffOnly is set,
+    STANDARD otherwise.
+.PARAMETER Domains
+    One or more of the 10 domain names in
+    skills/security-review/SKILL.md's "Where to look next" table (e.g.
+    authorization, file-security, dependency-security - not every
+    plays/*.md basename has a corresponding domain here) to restrict
+    which scanner tools actually run, per
+    plays/scanner-selection.md's "TARGETED domain-driven tool
+    selection" table. Case-insensitive. Meant for TARGETED mode, driven
+    by skills/security-change-detection's classification output. Omit
+    to run every applicable tool (unchanged prior behavior) - this is
+    what QUICK/STANDARD/DEEP and an explicit "scan this" request should
+    use. An unrecognized domain name is rejected (exit 3).
 .EXAMPLE
     .\scripts\windows\scan.ps1
 .EXAMPLE
-    .\scripts\windows\scan.ps1 -DiffOnly -DiffBase main -Mode TARGETED
+    .\scripts\windows\scan.ps1 -DiffOnly -DiffBase main -Mode TARGETED -Domains authorization,file-security
 #>
 
 [CmdletBinding()]
 param(
     [switch]$DiffOnly,
     [string]$DiffBase = 'HEAD',
-    [string]$Mode
+    [string]$Mode,
+    [string[]]$Domains
 )
 
 $ErrorActionPreference = 'Stop'
@@ -191,6 +205,66 @@ function Get-ToolVersionString {
 }
 
 try {
+    # Validate -Mode/-Domains before touching the filesystem at all - a
+    # rejected call should not leave behind an empty output/scans/<ts>/
+    # directory tree with no summary.json in it.
+    if (-not $Mode) { $Mode = if ($DiffOnly) { 'TARGETED' } else { 'STANDARD' } }
+    $validModes = @('QUICK', 'STANDARD', 'DEEP', 'TARGETED')
+    $matchedMode = $validModes | Where-Object { $_ -eq $Mode.ToUpperInvariant() }
+    if (-not $matchedMode) {
+        # Write-Warning, not Write-Error: $ErrorActionPreference = 'Stop'
+        # turns Write-Error into a terminating error caught by the outer
+        # catch block below, which would report exit 1 (execution
+        # failure) instead of the intended 3 (bad argument) - same
+        # reasoning as the Write-Warning near the bottom of this script.
+        Write-Warning "Invalid -Mode '$Mode'. Valid values: $($validModes -join ', ')"
+        exit 3
+    }
+    $Mode = $matchedMode
+
+    # Authoritative domain -> tool mapping - see plays/scanner-selection.md's
+    # "TARGETED domain-driven tool selection" table. Keep all three
+    # (this map, scripts/macos/scan.sh's, and that table) in sync.
+    $DomainToolMap = [ordered]@{
+        'code-review'            = @('semgrep')
+        'web-security'           = @('semgrep')
+        'api-security'           = @('semgrep')
+        'authentication'         = @('semgrep')
+        'authorization'          = @('semgrep')
+        'data-security'          = @('semgrep')
+        'file-security'          = @('semgrep')
+        'configuration-security' = @('semgrep', 'trivy')
+        'secrets-security'       = @('gitleaks')
+        'dependency-security'    = @('osv-scanner', 'ecosystem-native')
+    }
+    # Case-insensitive, matching -Mode's own convention above.
+    $Domains = @($Domains | ForEach-Object { $_.ToLowerInvariant() })
+    foreach ($d in $Domains) {
+        if (-not $DomainToolMap.Contains($d)) {
+            Write-Warning "Unknown domain '$d'. Valid domains: $($DomainToolMap.Keys -join ', ')"
+            exit 3
+        }
+    }
+    # Fixed canonical order (matching the table above), independent of
+    # the order -Domains was given in, so scan.sh's independently-built
+    # equivalent list is reproducibly identical for the same domain set.
+    $canonicalToolOrder = @('semgrep', 'gitleaks', 'osv-scanner', 'trivy', 'ecosystem-native')
+    $selectedTools = $null
+    if ($Domains -and $Domains.Count -gt 0) {
+        $rawSelected = @($Domains | ForEach-Object { $DomainToolMap[$_] } | Select-Object -Unique)
+        $selectedTools = @($canonicalToolOrder | Where-Object { $rawSelected -contains $_ })
+    }
+    $skippedTools = [ordered]@{}
+    function Test-ToolSelected {
+        param([string]$Tool)
+        if ($null -eq $selectedTools) { return $true }
+        return $selectedTools -contains $Tool
+    }
+    function Add-SkippedTool {
+        param([string]$Tool)
+        $skippedTools[$Tool] = "not relevant to current change (domains: $($Domains -join ', '))"
+    }
+
     $repoRoot = Get-RepoRoot
     $timestamp = Get-Date -Format 'yyyy-MM-ddTHHmmss'
     $scanDir = Join-Path $repoRoot "output\scans\$timestamp"
@@ -201,8 +275,6 @@ try {
     Write-Host "Scanning: $repoRoot" -ForegroundColor Cyan
     Write-Host "Output:   $scanDir" -ForegroundColor Cyan
     Write-Host ''
-
-    if (-not $Mode) { $Mode = if ($DiffOnly) { 'TARGETED' } else { 'STANDARD' } }
 
     $gitCommit = $null
     $dirty = $null
@@ -234,6 +306,9 @@ try {
     $anyToolRan = $false
 
     # --- Semgrep: static analysis candidates ---
+    if (-not (Test-ToolSelected 'semgrep')) {
+        Add-SkippedTool 'semgrep'
+    } else {
     $semgrepArgs = @('scan', '--config', 'auto', '--json', '--quiet')
     if ($DiffOnly) {
         $prevEAP2 = $ErrorActionPreference
@@ -277,8 +352,12 @@ try {
     } else {
         $coverage.Add("Scanner unavailable: semgrep ($($semgrep.error)). Coverage impact: automated static-analysis candidates unavailable for this run. Fallback: manual semantic review per plays/code-review.md.")
     }
+    }
 
     # --- Gitleaks: secrets ---
+    if (-not (Test-ToolSelected 'gitleaks')) {
+        Add-SkippedTool 'gitleaks'
+    } else {
     # --redact is gitleaks' own, tested redaction - the primary
     # control against ever writing a live secret to disk. Protect-Secret
     # below is a second, defense-in-depth pass in case a future
@@ -327,8 +406,12 @@ try {
     } else {
         $coverage.Add("Scanner unavailable: gitleaks ($($gitleaks.error)). Coverage impact: automated secret detection unavailable for this run. Fallback: manual secret review per plays/secrets-security.md.")
     }
+    }
 
     # --- OSV-Scanner: dependency vulnerabilities ---
+    if (-not (Test-ToolSelected 'osv-scanner')) {
+        Add-SkippedTool 'osv-scanner'
+    } else {
     $osvRaw = Join-Path $rawDir 'osv-scanner.json'
     $osv = Invoke-ToolSafely -ToolName 'osv-scanner' -Command 'osv-scanner' -Arguments @('--recursive', '--format', 'json', '--output', $osvRaw, $repoRoot)
     if ($osv.ran) {
@@ -355,9 +438,13 @@ try {
     } else {
         $coverage.Add("Scanner unavailable: osv-scanner ($($osv.error)). Coverage impact: automated dependency-vulnerability detection unavailable for this run. Fallback: ecosystem-native tools below, or manual review per plays/dependency-security.md.")
     }
+    }
 
     # --- Trivy: filesystem/dependency/secret/config (optional, overlaps
     #     with the above; adds container/config coverage when relevant) ---
+    if (-not (Test-ToolSelected 'trivy')) {
+        Add-SkippedTool 'trivy'
+    } else {
     $trivyRaw = Join-Path $rawDir 'trivy.json'
     $trivy = Invoke-ToolSafely -ToolName 'trivy' -Command 'trivy' -Arguments @('fs', '--scanners', 'vuln,misconfig', '--format', 'json', '--output', $trivyRaw, $repoRoot)
     if ($trivy.ran) {
@@ -384,8 +471,14 @@ try {
     } else {
         $coverage.Add("Scanner unavailable: trivy ($($trivy.error)). Coverage impact: none required - trivy is an optional enhancement over osv-scanner/gitleaks for this project type.")
     }
+    }
 
     # --- Ecosystem-native tools ---
+    if (-not (Test-ToolSelected 'ecosystem-native')) {
+        if ($hasDotnet) { Add-SkippedTool 'dotnet-list-package' }
+        if ($hasNode) { Add-SkippedTool 'npm-audit' }
+        if ($hasPython) { Add-SkippedTool 'pip-audit' }
+    } else {
     if ($hasDotnet) {
         $dotnetOut = Join-Path $rawDir 'dotnet-list-package-vulnerable.txt'
         $r = Invoke-ToolSafely -ToolName 'dotnet' -Command 'dotnet' -Arguments @('list', 'package', '--vulnerable', '--include-transitive') -WorkingDirectory $repoRoot
@@ -463,6 +556,7 @@ try {
             $coverage.Add("pip-audit unavailable ($($r.error)). Coverage impact: Python dependency vulnerabilities not double-checked via native tooling (osv-scanner above still covers this ecosystem if it ran).")
         }
     }
+    }
 
     # --- Summary ---
     $summary = [ordered]@{
@@ -475,6 +569,18 @@ try {
         diffBase      = $(if ($DiffOnly) { $DiffBase } else { $null })
         ecosystems    = [ordered]@{ dotnet = $hasDotnet; node = $hasNode; python = $hasPython }
         toolVersions  = $toolVersions
+        toolSelection = [ordered]@{
+            # The leading comma prevents PowerShell from unrolling a
+            # single-element array down to a bare scalar when it flows
+            # through this hashtable-literal value position - without
+            # it, `-Domains secrets-security` would serialize `domains`
+            # as the string "secrets-security" instead of an array,
+            # breaking any consumer that iterates it (and contradicting
+            # tools/README.md's documented schema).
+            domains       = if ($Domains -and $Domains.Count -gt 0) { , $Domains } else { $null }
+            selectedTools = $selectedTools
+            skippedTools  = $skippedTools
+        }
         findingsCount = $findingsCount
         coverageGaps  = $coverage
     }

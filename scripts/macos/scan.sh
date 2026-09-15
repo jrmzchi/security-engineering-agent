@@ -15,12 +15,31 @@
 # versions, and a rejected flag should never look identical to a clean
 # scan.
 #
-# Usage: ./scripts/macos/scan.sh [--diff-only] [--diff-base <ref>] [--mode <QUICK|STANDARD|DEEP|TARGETED>]
+# Usage: ./scripts/macos/scan.sh [--diff-only] [--diff-base <ref>] [--mode <QUICK|STANDARD|DEEP|TARGETED>] [--domains <domain>[,<domain>...]]
+#
+# --domains restricts which scanner tools actually run, per
+# plays/scanner-selection.md's "TARGETED domain-driven tool selection"
+# table (e.g. --domains authorization,file-security). Omit to run every
+# applicable tool (unchanged prior behavior).
 
 set -uo pipefail
 
 BASH_VER_NUM=$(( ${BASH_VERSINFO[0]:-0} * 100 + ${BASH_VERSINFO[1]:-0} ))
 if [ "$BASH_VER_NUM" -lt 404 ]; then
+    # Stock macOS ships Bash 3.2; Homebrew's bash is commonly installed
+    # but not first on PATH (or the user hasn't opened a new shell since
+    # installing it). Try the two standard Homebrew prefixes and
+    # transparently re-exec under a newer bash before giving up - this
+    # automates exactly what the error message below already tells the
+    # user to do by hand.
+    for candidate in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+        if [ -x "$candidate" ]; then
+            cand_num="$("$candidate" -c 'echo $(( BASH_VERSINFO[0]*100 + BASH_VERSINFO[1] ))' 2>/dev/null)"
+            if [ -n "${cand_num:-}" ] && [ "$cand_num" -ge 404 ]; then
+                exec "$candidate" "$0" "$@"
+            fi
+        fi
+    done
     echo "This script requires Bash 4.4 or later (found: ${BASH_VERSION:-unknown})." >&2
     echo "macOS ships Bash 3.2 by default (this script needs 4.4+ for" >&2
     echo "associative arrays and safe handling of empty arrays under set -u)." >&2
@@ -33,11 +52,37 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+print_usage() {
+    cat <<'EOF'
+Usage: ./scripts/macos/scan.sh [--diff-only] [--diff-base <ref>] [--mode <QUICK|STANDARD|DEEP|TARGETED>] [--domains <domain>[,<domain>...]]
+
+--diff-only     Only pass files changed vs. --diff-base to tools that
+                support file-scoped scanning (Semgrep). Other tools
+                still scan the whole tree.
+--diff-base     Git ref to diff against when --diff-only is used.
+                Default: HEAD.
+--mode          QUICK, STANDARD, DEEP, or TARGETED (case-insensitive).
+                Recorded in scan metadata. Defaults to TARGETED when
+                --diff-only is set, STANDARD otherwise.
+--domains       One or more of the 10 domain names in
+                skills/security-review/SKILL.md's "Where to look next"
+                table (e.g. authorization,file-security) to restrict
+                which scanner tools actually run, per
+                plays/scanner-selection.md's "TARGETED domain-driven
+                tool selection". Omit to run every applicable tool.
+EOF
+}
+
 DIFF_ONLY=false
 DIFF_BASE="HEAD"
 MODE=""
+DOMAINS_RAW=""
 while [ $# -gt 0 ]; do
     case "$1" in
+        -h|--help)
+            print_usage
+            exit 0
+            ;;
         --diff-only)
             DIFF_ONLY=true
             shift
@@ -58,6 +103,14 @@ while [ $# -gt 0 ]; do
             MODE="$2"
             shift 2
             ;;
+        --domains)
+            if [ $# -lt 2 ]; then
+                echo "--domains requires a value" >&2
+                exit 3
+            fi
+            DOMAINS_RAW="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown argument: $1" >&2
             exit 3
@@ -67,6 +120,92 @@ done
 if [ -z "$MODE" ]; then
     if [ "$DIFF_ONLY" = true ]; then MODE="TARGETED"; else MODE="STANDARD"; fi
 fi
+case "${MODE^^}" in
+    QUICK|STANDARD|DEEP|TARGETED) MODE="${MODE^^}" ;;
+    *)
+        echo "Invalid --mode '$MODE'. Valid values: QUICK, STANDARD, DEEP, TARGETED" >&2
+        exit 3
+        ;;
+esac
+
+# Authoritative domain -> tool mapping - see plays/scanner-selection.md's
+# "TARGETED domain-driven tool selection" table. Keep all three (this
+# map, scripts/windows/scan.ps1's, and that table) in sync.
+declare -A DOMAIN_TOOLS=(
+    [code-review]="semgrep"
+    [web-security]="semgrep"
+    [api-security]="semgrep"
+    [authentication]="semgrep"
+    [authorization]="semgrep"
+    [data-security]="semgrep"
+    [file-security]="semgrep"
+    [configuration-security]="semgrep trivy"
+    [secrets-security]="gitleaks"
+    [dependency-security]="osv-scanner ecosystem-native"
+)
+# Fixed canonical order (matching the table above) for error messages and
+# the selectedTools list - a bash associative array's key order is a hash
+# order, not declaration order, so without this the same --domains value
+# could print/report tools in a different order on every run, and
+# scan.ps1's independently-built equivalent list would not reliably match.
+DOMAIN_ORDER=(code-review web-security api-security authentication authorization data-security file-security configuration-security secrets-security dependency-security)
+TOOL_ORDER=(semgrep gitleaks osv-scanner trivy ecosystem-native)
+
+DOMAINS=()
+if [ -n "$DOMAINS_RAW" ]; then
+    case "$DOMAINS_RAW" in
+        *$'\n'*|*$'\t'*)
+            echo "--domains value must not contain newlines or tabs" >&2
+            exit 3
+            ;;
+        *,)
+            # bash's `read -ra` silently drops exactly one trailing
+            # empty field from a trailing delimiter (verified: "a,"
+            # splits to a single-element array, not ["a", ""]) - reject
+            # explicitly rather than silently accepting "authorization,"
+            # as equivalent to "authorization".
+            echo "--domains value must not end with a trailing comma" >&2
+            exit 3
+            ;;
+    esac
+    IFS=',' read -ra RAW_SPLIT <<< "$DOMAINS_RAW"
+    for raw in "${RAW_SPLIT[@]}"; do
+        # Trim leading/trailing whitespace, then lowercase (case-
+        # insensitive, matching --mode's own convention above).
+        trimmed="${raw#"${raw%%[![:space:]]*}"}"
+        trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+        trimmed="${trimmed,,}"
+        if [ -z "$trimmed" ]; then
+            echo "--domains contains an empty domain name (check for a stray or repeated comma)" >&2
+            exit 3
+        fi
+        DOMAINS+=("$trimmed")
+    done
+fi
+declare -A SELECTED_TOOLS=()
+for d in "${DOMAINS[@]:-}"; do
+    [ -z "$d" ] && continue
+    if [ -z "${DOMAIN_TOOLS[$d]+set}" ]; then
+        echo "Unknown domain '$d'. Valid domains: ${DOMAIN_ORDER[*]}" >&2
+        exit 3
+    fi
+    for t in ${DOMAIN_TOOLS[$d]}; do
+        SELECTED_TOOLS[$t]=1
+    done
+done
+declare -A SKIPPED_TOOLS=()
+is_tool_selected() {
+    # No --domains given -> no restriction, every applicable tool runs
+    # (unchanged prior behavior).
+    [ "${#DOMAINS[@]}" -eq 0 ] && return 0
+    [ -n "${SELECTED_TOOLS[$1]:-}" ]
+}
+add_skipped() {
+    local joined
+    joined=$(printf ', %s' "${DOMAINS[@]}")
+    joined="${joined#, }"
+    SKIPPED_TOOLS[$1]="not relevant to current change (domains: $joined)"
+}
 
 PY="$(command -v python3 || true)"
 
@@ -178,7 +317,9 @@ ANY_TOOL_RAN=false
 add_gap() { COVERAGE_GAPS+=("$1"); }
 
 # --- Semgrep ---
-if command -v semgrep >/dev/null 2>&1; then
+if ! is_tool_selected semgrep; then
+    add_skipped semgrep
+elif command -v semgrep >/dev/null 2>&1; then
     ANY_TOOL_RAN=true
     SEMGREP_TARGETS=("$REPO_ROOT")
     if [ "$DIFF_ONLY" = true ] && command -v git >/dev/null 2>&1; then
@@ -217,7 +358,9 @@ fi
 # parses, and rewrites the file is itself a second place a real secret
 # could end up unredacted if that step fails silently, which is exactly
 # the failure mode this replaces.
-if command -v gitleaks >/dev/null 2>&1; then
+if ! is_tool_selected gitleaks; then
+    add_skipped gitleaks
+elif command -v gitleaks >/dev/null 2>&1; then
     ANY_TOOL_RAN=true
     GITLEAKS_RAW="$RAW_DIR/gitleaks.json"
     GITLEAKS_STDERR="$RAW_DIR/gitleaks.stderr.log"
@@ -245,7 +388,9 @@ else
 fi
 
 # --- OSV-Scanner ---
-if command -v osv-scanner >/dev/null 2>&1; then
+if ! is_tool_selected osv-scanner; then
+    add_skipped osv-scanner
+elif command -v osv-scanner >/dev/null 2>&1; then
     ANY_TOOL_RAN=true
     OSV_RAW="$RAW_DIR/osv-scanner.json"
     OSV_STDERR="$RAW_DIR/osv-scanner.stderr.log"
@@ -270,7 +415,9 @@ else
 fi
 
 # --- Trivy (optional) ---
-if command -v trivy >/dev/null 2>&1; then
+if ! is_tool_selected trivy; then
+    add_skipped trivy
+elif command -v trivy >/dev/null 2>&1; then
     ANY_TOOL_RAN=true
     TRIVY_RAW="$RAW_DIR/trivy.json"
     TRIVY_STDERR="$RAW_DIR/trivy.stderr.log"
@@ -295,6 +442,11 @@ else
 fi
 
 # --- Ecosystem-native tools ---
+if ! is_tool_selected ecosystem-native; then
+    [ "$HAS_DOTNET" = true ] && add_skipped dotnet-list-package
+    [ "$HAS_NODE" = true ] && add_skipped npm-audit
+    [ "$HAS_PYTHON" = true ] && add_skipped pip-audit
+else
 if [ "$HAS_DOTNET" = true ]; then
     if command -v dotnet >/dev/null 2>&1; then
         ANY_TOOL_RAN=true
@@ -377,6 +529,7 @@ PYEOF
         add_gap "pip-audit unavailable. Coverage impact: Python dependency vulnerabilities not double-checked via native tooling (osv-scanner above still covers this ecosystem if it ran)."
     fi
 fi
+fi
 
 # --- Summary ---
 # Write findings-count and coverage-gap lines to intermediate files and
@@ -395,6 +548,22 @@ for gap in "${COVERAGE_GAPS[@]:-}"; do
     [ -z "$gap" ] && continue
     printf '%s\n' "$gap" >> "$GAPS_TXT"
 done
+SKIPPED_TXT="$SCAN_DIR/.skipped_tools.tmp"
+: > "$SKIPPED_TXT"
+for key in "${!SKIPPED_TOOLS[@]}"; do
+    printf '%s\t%s\n' "$key" "${SKIPPED_TOOLS[$key]}" >> "$SKIPPED_TXT"
+done
+DOMAINS_CSV=""
+SELECTED_LIST=""
+if [ "${#DOMAINS[@]}" -gt 0 ]; then
+    # Canonical order (TOOL_ORDER), not associative-array hash order -
+    # see the comment on TOOL_ORDER's declaration above.
+    for t in "${TOOL_ORDER[@]}"; do
+        [ -n "${SELECTED_TOOLS[$t]:-}" ] && SELECTED_LIST="$SELECTED_LIST $t"
+    done
+    SELECTED_LIST="${SELECTED_LIST# }"
+    DOMAINS_CSV=$(IFS=,; echo "${DOMAINS[*]}")
+fi
 
 SUMMARY_PATH="$NORMALIZED_DIR/summary.json"
 if [ -n "$PY" ]; then
@@ -403,6 +572,7 @@ if [ -n "$PY" ]; then
         "$GIT_COMMIT" "$DIRTY" "$MODE" "$DIFF_ONLY" "$DIFF_BASE"
         "$HAS_DOTNET" "$HAS_NODE" "$HAS_PYTHON"
         "$SEMGREP_VERSION" "$GITLEAKS_VERSION" "$OSV_SCANNER_VERSION" "$TRIVY_VERSION"
+        "$DOMAINS_CSV" "$SELECTED_LIST" "$SKIPPED_TXT"
     )
     "$PY" - "${SCAN_ARGS[@]}" <<'PYEOF'
 import json, sys
@@ -410,7 +580,8 @@ import json, sys
 (out_path, findings_txt, gaps_txt, timestamp, repo_root,
  git_commit, dirty, mode, diff_only, diff_base,
  has_dotnet, has_node, has_python,
- semgrep_version, gitleaks_version, osv_scanner_version, trivy_version) = sys.argv[1:18]
+ semgrep_version, gitleaks_version, osv_scanner_version, trivy_version,
+ domains_raw, selected_list, skipped_txt) = sys.argv[1:21]
 
 def to_bool(s):
     return s == "true"
@@ -434,6 +605,15 @@ gaps = []
 with open(gaps_txt, encoding="utf-8") as f:
     gaps = [line.rstrip("\n") for line in f if line.strip()]
 
+skipped = {}
+with open(skipped_txt, encoding="utf-8") as f:
+    for line in f:
+        line = line.rstrip("\n")
+        if not line:
+            continue
+        key, _, reason = line.partition("\t")
+        skipped[key] = reason
+
 diff_only_b = to_bool(diff_only)
 summary = {
     "timestamp": timestamp,
@@ -454,6 +634,11 @@ summary = {
         "osv-scanner": none_if_empty(osv_scanner_version),
         "trivy": none_if_empty(trivy_version),
     },
+    "toolSelection": {
+        "domains": domains_raw.split(",") if domains_raw else None,
+        "selectedTools": selected_list.split() if domains_raw else None,
+        "skippedTools": skipped,
+    },
     "findingsCount": findings,
     "coverageGaps": gaps,
 }
@@ -464,7 +649,7 @@ PYEOF
 else
     echo "(python3 unavailable — writing a minimal, unescaped summary; treat findingsCount/coverageGaps as approximate)" > "$SUMMARY_PATH"
 fi
-rm -f "$FINDINGS_TXT" "$GAPS_TXT"
+rm -f "$FINDINGS_TXT" "$GAPS_TXT" "$SKIPPED_TXT"
 
 echo ""
 echo "Findings count (raw, per tool — not yet validated):"

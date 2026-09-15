@@ -2,11 +2,10 @@
 
 Authoritative procedure connecting security into the normal development
 lifecycle, proportionally — not a full audit after every change. This
-play defines the workflow; wiring `AGENTS.md`/`CLAUDE.md` to actually
-route ordinary coding requests through it is tracked separately (see
-that wiring batch's notes) — until that wiring lands, this play is
-reachable by an agent that already knows to look for it, not yet
-something a plain "add an endpoint" request triggers on its own.
+play defines the workflow; `AGENTS.md`'s "Before implementing a
+meaningful software change" and `CLAUDE.md`'s "Proactive workflow"
+section route ordinary coding requests through it, so a plain "add an
+endpoint" request triggers this, not just an explicit review request.
 
 ## Workflow
 
