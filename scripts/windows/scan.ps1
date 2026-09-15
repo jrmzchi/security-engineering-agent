@@ -1,4 +1,5 @@
 ﻿#Requires -Version 5.1
+
 <#
 .SYNOPSIS
     Runs the applicable security scanners against this repository and

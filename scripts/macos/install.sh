@@ -22,7 +22,12 @@ if [ "$BASH_VER_NUM" -lt 404 ]; then
         if [ -x "$candidate" ]; then
             cand_num="$("$candidate" -c 'echo $(( BASH_VERSINFO[0]*100 + BASH_VERSINFO[1] ))' 2>/dev/null)"
             if [ -n "${cand_num:-}" ] && [ "$cand_num" -ge 404 ]; then
-                exec "$candidate" "$0" "$@"
+                # ${1+"$@"} rather than "$@": under Bash <= 4.3 with
+                # `set -u` and zero positional parameters, a bare "$@"
+                # is treated as an unbound variable and would abort
+                # right here, before the newer bash ever gets a chance
+                # to run.
+                exec "$candidate" "$0" ${1+"$@"}
             fi
         fi
     done

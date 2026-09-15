@@ -8,7 +8,7 @@
 # tool is unavailable (e.g. a pure .NET repo is not penalized for
 # missing npm).
 #
-# Usage: ./scripts/macos/doctor.sh
+# Usage: ./scripts/macos/doctor.sh [--help]
 
 set -uo pipefail
 
@@ -24,7 +24,12 @@ if [ "$BASH_VER_NUM" -lt 404 ]; then
         if [ -x "$candidate" ]; then
             cand_num="$("$candidate" -c 'echo $(( BASH_VERSINFO[0]*100 + BASH_VERSINFO[1] ))' 2>/dev/null)"
             if [ -n "${cand_num:-}" ] && [ "$cand_num" -ge 404 ]; then
-                exec "$candidate" "$0" "$@"
+                # ${1+"$@"} rather than "$@": under Bash <= 4.3 with
+                # `set -u` and zero positional parameters (this
+                # script's only call form), a bare "$@" is treated as
+                # an unbound variable and would abort right here,
+                # before the newer bash ever gets a chance to run.
+                exec "$candidate" "$0" ${1+"$@"}
             fi
         fi
     done
@@ -39,6 +44,25 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# This script takes no options other than --help - but it should still
+# reject an unrecognized one explicitly (matching install.sh/scan.sh's
+# convention) rather than silently ignoring it and running the full
+# report anyway.
+for arg in ${1+"$@"}; do
+    case "$arg" in
+        -h|--help)
+            echo "Usage: ./scripts/macos/doctor.sh"
+            echo "Reports which security tooling is available for this repository."
+            echo "Takes no options."
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $arg" >&2
+            exit 3
+            ;;
+    esac
+done
 
 has_pattern() {
     # -quit IS supported by BSD find (macOS's default) as well as GNU

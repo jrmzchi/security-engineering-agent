@@ -1,0 +1,5 @@
+# Force LF for shell scripts regardless of a contributor's autocrlf
+# setting - a CRLF line ending (especially in the shebang line) can
+# break execution on macOS/Linux in subtle ways, and this repo's
+# scripts/macos/*.sh are specifically meant to run there.
+*.sh text eol=lf
