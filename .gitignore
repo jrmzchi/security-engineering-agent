@@ -1,0 +1,21 @@
+# Scan output (raw + normalized results, reports) — regenerated per run
+output/scans/
+output/reports/
+!output/.gitkeep
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Language-specific caches that may appear in test fixtures
+__pycache__/
+*.pyc
+node_modules/
+bin/
+obj/
