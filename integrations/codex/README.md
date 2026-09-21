@@ -41,6 +41,15 @@ anything beyond NONE/LOW sensitivity, follow
 treating security as something only triggered by an explicit "review
 this" request.
 
+**Project-security-intelligence capabilities** (persistent baseline/
+attack-surface facts, cross-file data flow, change-impact analysis,
+review budget, attack-chain analysis, adversarial validation) are
+plain `skills/`+`plays/` Markdown like everything else in this kit —
+no Codex-specific setup, no Claude-native wrapper needed. `AGENTS.md`'s
+"When to use which skill" and "Before implementing a meaningful
+software change" sections route to them the same way they route to
+the original V1/V2 capabilities.
+
 **Everything else** — which skill to use when, the review workflow, the
 confidence/severity models — is identical to any other agent using this
 kit. See `AGENTS.md` at the repository root.

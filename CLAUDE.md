@@ -13,10 +13,16 @@ file is agent-agnostic and is the primary entry point; read it first.
 Optional Claude-native subagent definitions live under
 `integrations/claude/agents/`: six mirror the portable agents in
 `agents/` (security-team-lead, security-architect, security-reviewer,
-security-validator, dependency-auditor, secrets-reviewer), and two more
-(security-change-detection, security-gate) point directly at their
-`skills/`+`plays/` pair instead, since they are lightweight classifiers
-rather than coordinating roles. They are accelerators only — none of
+security-validator, dependency-auditor, secrets-reviewer), and the rest
+(security-change-detection, security-gate, and the five
+project-security-intelligence capabilities — project-security-baseline,
+attack-surface-map, security-impact-analysis, attack-chain-analysis,
+adversarial-validation) point directly at their `skills/`+`plays/` pair
+instead, since they are classifiers/analysis passes rather than
+coordinating roles. See `integrations/claude/README.md` for the full
+list and why `plays/cross-file-data-flow.md` and
+`plays/review-budget.md` have no wrapper of their own. They are
+accelerators only — none of
 the security procedures in this repo depend on Claude subagents,
 skills, plugins, or hooks. A sequential, single-agent fallback must
 always work by reading the plain Markdown in `skills/` and `plays/`

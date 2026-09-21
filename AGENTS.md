@@ -11,7 +11,10 @@ skills/       reusable security capabilities (what to do, when)
 plays/        the detailed step-by-step procedures (authoritative)
 references/   technology/security knowledge (authoritative)
 agents/       portable role definitions (reviewer, validator, architect, ...)
-templates/    finding / report / threat-model output formats
+templates/    finding / report / threat-model / security-design
+              output formats, plus project-security-baseline /
+              attack-surface-map / attack-chain records for the V3
+              capabilities
 tools/        wrappers around external scanners (Semgrep, Gitleaks, OSV, Trivy)
 scripts/      cross-platform install / scan / doctor entry points
 ```
@@ -42,6 +45,27 @@ Checking third-party dependencies for known vulnerabilities
 
 Checking for exposed credentials, keys, or tokens
     -> skills/secrets-scan/SKILL.md
+
+Building/refreshing a persistent architecture-fact record for a
+target repository (languages, auth, storage, external services, ...)
+    -> skills/project-security-baseline/SKILL.md
+
+Building/refreshing a persistent entry-point/control/sink graph for
+a target repository
+    -> skills/attack-surface-map/SKILL.md
+
+Checking what else depends on a changed shared component, beyond
+the diff itself
+    -> skills/security-impact-analysis/SKILL.md
+
+Multiple confirmed findings in the same area might combine into a
+more serious attack chain
+    -> skills/attack-chain-analysis/SKILL.md
+
+A confirmed CRITICAL/complex-control finding or a HIGH/CRITICAL
+remediation needs an active bypass attempt, not just plausibility
+confirmation
+    -> skills/adversarial-validation/SKILL.md
 ```
 
 ## Before implementing a meaningful software change
@@ -52,14 +76,25 @@ to how security-sensitive it turns out to be:
 
 ```text
 1. classify security sensitivity   -> skills/security-change-detection
+   (refined, not replaced, by a project baseline/attack-surface map
+   and review budget when they exist — plays/project-security-baseline.md,
+   plays/attack-surface-mapping.md, plays/review-budget.md)
 2. security design if HIGH          -> skills/security-design
 3. implement
 4. inspect the actual diff (incl. untracked files)
+   (expand scope beyond the diff for a changed shared component
+   -> skills/security-impact-analysis)
 5. re-classify against what was actually built
 6. proportional targeted review     -> skills/security-review (TARGETED mode)
+   (multi-file candidates: plays/cross-file-data-flow.md)
 7. validate important candidates    -> skills/security-validate
+   (check chaining first: skills/attack-chain-analysis — a chain's own
+   inter-step controls are themselves an adversarial-validation
+   trigger, at any chain Confidence level; also applies directly to
+   CRITICAL/complex-control findings: skills/adversarial-validation)
 8. apply the Security Gate           -> skills/security-gate
 9. remediate and re-validate if needed -> plays/security-remediation.md
+   (HIGH/CRITICAL remediation's bypass check: skills/adversarial-validation)
 ```
 
 Full workflow, proportionality rules, and why NONE/LOW changes get none

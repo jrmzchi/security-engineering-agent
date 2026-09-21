@@ -87,9 +87,12 @@ Generate final report
    before being reported as confirmed — see
    `plays/finding-validation.md`.
 10. **Identify chained vulnerabilities.** See "Vulnerability chaining" in
-    `plays/finding-validation.md` — look for combinations of
-    individually moderate findings that together produce a more serious
-    outcome. Do not artificially combine unrelated findings.
+    `plays/finding-validation.md` for the core concept, and
+    `plays/attack-chain-analysis.md` for the structured record (chain
+    ID, preconditions, ordered steps, combined severity) — look for
+    combinations of individually moderate findings that together
+    produce a more serious outcome. Do not artificially combine
+    unrelated findings.
 11. **Generate final report.** Using `templates/security-report.md`.
 
 ## Sequential fallback

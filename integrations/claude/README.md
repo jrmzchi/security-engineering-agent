@@ -4,7 +4,9 @@ Optional accelerators only. Nothing in `skills/` or `plays/` depends on
 anything in this directory — a single Claude Code session reading the
 plain Markdown directly (no subagents, no plugins, no hooks) gets the
 full, correct workflow. What this directory adds is the ability to run
-the specialist roles (`agents/*.md`) as separate, parallel Claude
+these capabilities — six of them mirroring the specialist roles in
+`agents/*.md`, the rest wrapping a `skills/`+`plays/` pair directly (see
+"What's here" below for which is which) — as separate, parallel Claude
 subagents where that is available and worth the cost.
 
 ## What's here
@@ -18,17 +20,27 @@ integrations/claude/agents/dependency-auditor.md
 integrations/claude/agents/secrets-reviewer.md
 integrations/claude/agents/security-change-detection.md
 integrations/claude/agents/security-gate.md
+integrations/claude/agents/project-security-baseline.md
+integrations/claude/agents/attack-surface-map.md
+integrations/claude/agents/security-impact-analysis.md
+integrations/claude/agents/attack-chain-analysis.md
+integrations/claude/agents/adversarial-validation.md
 ```
 
 Each is a thin Claude subagent definition (YAML frontmatter + a short
 body) that points at the corresponding authoritative source and does
 not duplicate any procedure — see `README.md`'s single-source-of-truth
 principle. If a play changes, these files do not need to change. The
-first six point at a portable role in `agents/`; the last two
-(`security-change-detection`, `security-gate`) point directly at their
-`skills/`+`plays/` pair instead — they are lightweight classifiers, not
-coordinating roles, so there is no corresponding `agents/*.md` for them
-to wrap.
+first six point at a portable role in `agents/`; the rest
+(`security-change-detection`, `security-gate`, and the five
+project-security-intelligence capabilities added after it) point
+directly at their `skills/`+`plays/` pair instead — they are
+classifiers/analysis passes, not coordinating roles, so there is no
+corresponding `agents/*.md` for them to wrap. `plays/cross-file-data-flow.md`
+and `plays/review-budget.md` have no wrapper here either, for the same
+reason they have no portable `skills/` entry of their own — they are
+techniques the existing roles consult, not separately-invoked
+capabilities.
 
 ## Installing them as project subagents
 

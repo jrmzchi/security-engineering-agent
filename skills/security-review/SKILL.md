@@ -42,19 +42,37 @@ Final findings
    full-repository review.
 2. **Architecture discovery.** Identify languages/frameworks in play, entry
    points, trust boundaries, and which technology references apply
-   (see "Progressive disclosure" below).
+   (see "Progressive disclosure" below). If `.security/baseline.json`
+   (`plays/project-security-baseline.md`) already exists for this
+   repository and is fresh, consult it instead of rediscovering
+   everything from scratch.
 3. **Attack surface identification.** Enumerate inputs an attacker
    controls: HTTP requests, query params, file uploads, headers, cookies,
-   deserialized payloads, environment/config, third-party webhooks.
+   deserialized payloads, environment/config, third-party webhooks. If
+   `.security/attack-surface.json` (`plays/attack-surface-mapping.md`)
+   already exists and is fresh, consult it for known entry
+   points/controls/sinks — same freshness caveat as step 2's baseline.
 4. **Automated scanners.** Run applicable scanners (Semgrep, Gitleaks,
    OSV-Scanner, Trivy, ecosystem-native tools) per `scripts/*/scan.*`.
    Treat every scanner hit as a **candidate**, never a confirmed finding.
 5. **Manual semantic analysis.** Trace data flow for anything
    security-sensitive using the attack path model below. Open the
-   relevant play(s) from the table.
+   relevant play(s) from the table. When a candidate's source and sink
+   are in different files, use `plays/cross-file-data-flow.md`'s
+   explicit multi-hop procedure rather than stopping at the file
+   boundary.
 6. **Potential findings.** Draft findings using `templates/finding.md`.
 7. **Validation.** Every HIGH/CRITICAL candidate MUST go through
-   `skills/security-validate` before being reported as confirmed.
+   `skills/security-validate` before being reported as confirmed. Once
+   multiple findings are CONFIRMED, check
+   `plays/attack-chain-analysis.md`'s concrete test for whether any of
+   them combine into a more serious chain — do this before the next
+   sentence, since a discovered chain is itself one of
+   `plays/adversarial-validation.md`'s triggers. A confirmed CRITICAL
+   finding, a confirmed HIGH finding with more than one control in its
+   path, a chain's own inter-step controls, or any of the other cases
+   that play's trigger list names additionally needs its bypass
+   checklist, not just ordinary validation.
 8. **Final findings.** Assemble the report per
    `templates/security-report.md`.
 

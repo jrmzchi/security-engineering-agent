@@ -89,6 +89,14 @@ Did the fix introduce another vulnerability?
 Does legitimate functionality still work?
 ```
 
+For "Can the protection be bypassed a different way?" specifically,
+`plays/adversarial-validation.md` gives a systematic ten-technique
+checklist (alternate representations, encoding/canonicalization,
+sibling endpoints, and more) instead of relying on whatever bypass
+attempt comes to mind — apply it in full for any HIGH/CRITICAL
+remediation (see that play's trigger list, which names this exact
+case).
+
 Result:
 
 ```text

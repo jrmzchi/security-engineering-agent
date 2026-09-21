@@ -69,7 +69,20 @@ in this project. `plays/security-gate.md`'s `AWAITING_VALIDATION` and
 different names, not typos — see those plays for why a candidate
 awaiting its first validation pass, and a fix whose re-validation was
 inconclusive, are kept distinct from this status rather than reusing
-it.)
+it. `plays/attack-surface-mapping.md` DOES reuse this exact name for an
+unresolvable graph node/edge — that one is a safe reuse rather than
+another instance of this collision, because a map node/edge and a
+finding are never the same object, even though a finding's validation
+can consult the map while it's in progress (a `NEEDS_VERIFICATION` map
+node and a `NEEDS_VERIFICATION` finding can coexist at the same time
+without ambiguity, precisely because nothing ever has to ask "which
+one of these two do you mean?" about a single thing); see that play's
+"Evidence-backed mapping" section for why it didn't need its own new
+name the way the two above did. `plays/attack-chain-analysis.md`
+similarly reuses it for a chain whose linkage can't currently be
+confirmed — same reasoning: a chain and a finding are never the same
+object either, so this is a third safe reuse, not a third instance of
+the collision.)
 
 Always state the reason. Worked example:
 

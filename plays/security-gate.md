@@ -33,20 +33,45 @@ with the finding-level status of the same name — see "Handling an
 unresolved HIGH/CRITICAL candidate" below for why the two cases need
 different outcomes.
 
+**A chain record (`plays/attack-chain-analysis.md`) is a second,
+independent input this play consumes, alongside findings.** It is not
+itself a finding and carries no `CONFIRMED`/`REJECTED`/
+`NEEDS_VERIFICATION` finding-level status — instead it carries its own
+Confidence (`HIGH`/`MEDIUM`/`LOW`/`NEEDS_VERIFICATION`) and Chain
+severity fields, and this play gates on the chain's own assessed
+severity, not derived from its component findings' severities. Gate on
+it in addition to gating on each component finding individually — a
+CRITICAL chain built from component findings that individually only
+reach MEDIUM must BLOCK even though neither component alone would
+have. An unresolved (`NEEDS_VERIFICATION`-confidence) chain follows the
+same rule as an unresolved HIGH/CRITICAL candidate below — treated as
+unsafe, not a free pass; see "Default policy" for the exact rows. No
+automated tooling in this kit currently looks up a chain record as
+part of running the gate — until it does, whoever runs the gate must
+check for one manually and apply those rows by hand.
+
 ## Outcomes
 
 ```text
-PASS                     no CONFIRMED findings requiring action
-PASS_WITH_WARNINGS        CONFIRMED MEDIUM/LOW only — noted, not blocking
+PASS                     no CONFIRMED findings requiring action, and no
+                          chain record above INFORMATIONAL severity
+PASS_WITH_WARNINGS        CONFIRMED MEDIUM/LOW findings and/or a
+                          MEDIUM/LOW-severity chain record only —
+                          noted, not blocking
 AWAITING_VALIDATION       a HIGH/CRITICAL candidate exists that has not
                           yet been through skills/security-validate
 BLOCK                     a HIGH/CRITICAL finding is CONFIRMED, OR a
                           HIGH/CRITICAL candidate was independently
                           validated and resolved NEEDS_VERIFICATION
                           (see below — unresolved is treated as unsafe,
-                          not as a free pass)
-PASS_WITH_ACCEPTED_RISK    a BLOCK-eligible finding exists, but the user
-                          has explicitly accepted the risk
+                          not as a free pass), OR a chain record reaches
+                          CRITICAL/HIGH severity at any confidence,
+                          including NEEDS_VERIFICATION (same "no free
+                          pass" rule applied to the chain's own
+                          Confidence field)
+PASS_WITH_ACCEPTED_RISK    a BLOCK-eligible finding or chain record
+                          exists, but the user has explicitly accepted
+                          the risk
 ```
 
 These five have a fixed precedence, most severe first, for aggregating
@@ -58,12 +83,12 @@ PASS_WITH_WARNINGS > PASS
 ```
 
 Take the least-permissive (highest-precedence) outcome across all
-findings in scope. `REJECTED` findings are not live findings and do not
-enter this computation at all — see `plays/finding-validation.md`'s
-"Rejected findings" for where they go instead (kept for audit
-transparency, not gated on).
+findings **and any chain records** in scope. `REJECTED` findings are
+not live findings and do not enter this computation at all — see
+`plays/finding-validation.md`'s "Rejected findings" for where they go
+instead (kept for audit transparency, not gated on).
 
-## Default policy (per finding)
+## Default policy (per finding, or per chain record)
 
 ```text
 CONFIRMED, CRITICAL                                    -> BLOCK
@@ -76,6 +101,12 @@ CONFIRMED, MEDIUM                                         -> PASS_WITH_WARNINGS
 CONFIRMED, LOW                                             -> PASS_WITH_WARNINGS
 INFORMATIONAL                                               -> PASS
 REJECTED                                                     -> excluded (not gated)
+
+Chain record, CRITICAL or HIGH severity, any confidence
+    including NEEDS_VERIFICATION                           -> BLOCK
+Chain record, MEDIUM or LOW severity, any confidence
+    including NEEDS_VERIFICATION                           -> PASS_WITH_WARNINGS
+Chain record, INFORMATIONAL severity                          -> PASS
 ```
 
 ## Handling an unresolved HIGH/CRITICAL candidate
@@ -139,6 +170,14 @@ Gate outcome becomes `PASS_WITH_ACCEPTED_RISK` — not a plain `PASS`. Do
 not rewrite a blocking finding's record as if it were never found; the
 acceptance is a decision layered on top of the finding, not a
 replacement for it.
+
+A BLOCK-eligible chain record follows the same rule: retain the same
+fields (substituting the chain's own severity/confidence for
+"Original severity"/"Original confidence"), and the outcome becomes
+`PASS_WITH_ACCEPTED_RISK` rather than dropping the chain from the
+record. Accepting the chain's risk does not implicitly accept its
+component findings' risk, or vice versa — each is accepted (or not)
+independently.
 
 ## What this play does not do
 

@@ -1,6 +1,6 @@
 ---
 name: security-gate
-description: Apply a deterministic PASS/BLOCK decision to a completed security review based only on independently-validated findings. Use whenever a security-sensitive development task produced candidate findings, after HIGH/CRITICAL candidates have gone through skills/security-validate.
+description: Apply a deterministic PASS/BLOCK decision to a completed security review based on independently-validated findings and any attack-chain records. Use whenever a security-sensitive development task produced candidate findings, after HIGH/CRITICAL candidates have gone through skills/security-validate.
 ---
 
 # Security Gate
@@ -20,10 +20,12 @@ BLOCK
 PASS_WITH_ACCEPTED_RISK
 ```
 
-Full policy table (which finding status/severity maps to which
-outcome), the precedence order for aggregating multiple findings, the
-rule that only validated findings can trigger a HIGH/CRITICAL BLOCK,
-and explicit-risk-acceptance handling: `plays/security-gate.md`.
+Full policy table (which finding status/severity — or chain-record
+Confidence/Chain severity — maps to which outcome), the precedence
+order for aggregating multiple findings and chain records, the rule
+that an unvalidated finding cannot trigger a HIGH/CRITICAL BLOCK on
+scanner severity alone, and explicit-risk-acceptance handling:
+`plays/security-gate.md`.
 
 ## The one rule that matters most
 
@@ -37,6 +39,14 @@ meaning, for a finding that *was* validated and the validator still
 couldn't confirm or reject it (see `plays/security-gate.md`'s "Handling
 an unresolved HIGH/CRITICAL candidate" for why that case actually
 `BLOCK`s rather than passing through).
+
+## Chain records are a second gate input
+
+An attack chain record (`plays/attack-chain-analysis.md`) is not
+itself a finding and doesn't go through `skills/security-validate` —
+see `plays/security-gate.md`'s "Inputs this play consumes" and
+"Default policy" table for exactly how it's gated, independent of each
+component finding's individual outcome.
 
 ## When to use
 

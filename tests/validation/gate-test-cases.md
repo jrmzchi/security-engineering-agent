@@ -7,7 +7,7 @@ kit's validation, these inputs are already-determined finding statuses
 not a judgment call. A reviewer that gets any of these wrong has a bug
 in gate logic, not a difference of security opinion.
 
-| # | Input finding(s) | Expected outcome |
+| # | Input finding(s) or chain record | Expected outcome |
 |---|---|---|
 | 1 | One CONFIRMED CRITICAL | BLOCK |
 | 2 | One CONFIRMED HIGH | BLOCK |
@@ -26,12 +26,23 @@ in gate logic, not a difference of security opinion.
 | 15 | A remediation's independent re-validation result: STILL_VULNERABLE | BLOCK (unchanged — see `remediation_fake_fix_after_still_vulnerable.py`) |
 | 16 | A remediation's independent re-validation result: FIX_UNVERIFIED | BLOCK (same treatment as case 4) |
 | 17 | A remediation's independent re-validation result: REGRESSION_INTRODUCED | The new issue gates as its own candidate, in addition to the original finding's status — see `plays/security-gate.md`'s "After a remediation attempt" |
+| 18 | A `plays/attack-chain-analysis.md` chain record, CRITICAL severity, HIGH confidence, built from two CONFIRMED MEDIUM component findings (neither BLOCK-eligible alone) | BLOCK (chain severity is an independent input, not derived from component severities — see `plays/security-gate.md`'s "Inputs this play consumes") |
+| 19 | A chain record, CRITICAL severity, `NEEDS_VERIFICATION` confidence | BLOCK (unresolved chain confidence is treated the same as an unresolved HIGH/CRITICAL candidate — not a free pass, same failure mode as case 4/16) |
+| 20 | A chain record, MEDIUM severity, HIGH confidence | PASS_WITH_WARNINGS |
+| 21 | A chain record, CRITICAL severity + one unrelated CONFIRMED LOW finding, same batch | BLOCK (precedence across findings and chain records together — see `plays/security-gate.md`'s "Outcomes") |
+| 22 | A chain record, INFORMATIONAL severity | PASS |
 
 Cases 1–9 exercise the default policy table directly. Case 10 exercises
 risk-acceptance handling; cases 11–13 exercise precedence/aggregation
 across a batch. Cases 14–17 exercise the remediation-outcome mapping.
-If a reviewer gets case 4 or 16 wrong
-(treating an unresolved HIGH/CRITICAL as safe), that is the specific
-failure mode `plays/security-gate.md`'s "Handling an unresolved
-HIGH/CRITICAL candidate" section exists to prevent — treat it as a
-priority fix, not a minor scoring miss.
+Cases 18–22 exercise the chain-record rows added alongside the
+per-finding policy table — a chain record is not itself a finding and
+has no CONFIRMED/REJECTED status, only a Confidence and a Chain
+severity, so the lookup keys differ from cases 1–17 even though the
+outcome vocabulary is the same.
+If a reviewer gets case 4, 16, or 19 wrong
+(treating an unresolved HIGH/CRITICAL, or an unresolved chain, as
+safe), that is the specific failure mode `plays/security-gate.md`'s
+"Handling an unresolved HIGH/CRITICAL candidate" section (and its
+chain-record analog) exists to prevent — treat it as a priority fix,
+not a minor scoring miss.

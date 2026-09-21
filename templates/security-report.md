@@ -60,6 +60,9 @@ MEDIUM:         N
 LOW:            N
 INFORMATIONAL:  N
 REJECTED:       N (kept separately, see below)
+ATTACK CHAINS:  N (0 if none identified; every chain that passed
+                "When a chain is real" counts here regardless of its
+                own Confidence level — see "Attack Chains" below)
 ```
 
 ## Critical Findings
@@ -83,6 +86,22 @@ One `templates/finding.md` block per finding.
 One `templates/finding.md` block per finding (or a condensed list, if
 there are many low-signal items — informational findings do not need
 the full template if a one-line description is equally clear).
+
+## Attack Chains
+
+One `templates/attack-chain.md` block per chain that passed
+`plays/attack-chain-analysis.md`'s "When a chain is real" test,
+placed directly after the severity-tier findings sections above (per
+that play's "Deduplication" section: referencing component findings
+by ID/title rather than restating them) and before the rejected/
+residual sections below, since a chain interprets already-reported
+findings rather than being one itself. Include a block at any
+Confidence level (`HIGH`/`MEDIUM`/`LOW`/`NEEDS_VERIFICATION`) — a
+chain carries no `CONFIRMED`/`REJECTED` finding-level status of its
+own (see `plays/security-gate.md`'s "Inputs this play consumes"); an
+unresolved one is a result, not the absence of one (see
+`plays/attack-chain-analysis.md`'s "Confidence" section). Omit this section entirely only when no chain
+was identified at all; do not include an empty section.
 
 ## Rejected Candidate Findings
 

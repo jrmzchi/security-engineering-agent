@@ -27,6 +27,25 @@ It answers two different questions depending on when you use it:
   code, and can I prove it?" (`skills/security-review`,
   `skills/security-validate`, `skills/dependency-audit`, `skills/secrets-scan`)
 
+Three layers, built up incrementally: **V1** is the review framework
+above. **V2** makes security part of the normal development lifecycle
+rather than something triggered only by an explicit review request —
+`skills/security-change-detection` classifies how sensitive an ordinary
+change is, `plays/secure-development-workflow.md` routes it
+proportionally through design/review/gate/remediation, and
+`skills/security-gate` makes the PASS/BLOCK decision deterministic.
+**V3** adds project security intelligence on top: a persistent,
+evidence-backed architecture baseline and attack-surface map for a
+target repository (`skills/project-security-baseline`,
+`skills/attack-surface-map`), reasoning that spans file and change
+boundaries (`plays/cross-file-data-flow.md`,
+`skills/security-impact-analysis`), proportional effort sizing
+(`plays/review-budget.md`), multi-finding attack chains
+(`skills/attack-chain-analysis`), and an active bypass-hunting pass for
+the highest-risk findings and fixes (`skills/adversarial-validation`).
+None of V3 is required for V1/V2 to keep working — see each skill's
+own "When to use" section for when it actually applies.
+
 ## Architecture
 
 ```text
@@ -49,15 +68,20 @@ they do not duplicate the playbook.
 ## Repository layout
 
 ```text
-skills/          SKILL.md entry points (security-review, security-design,
-                 threat-model, dependency-audit, secrets-scan,
-                 security-validate)
+skills/          SKILL.md entry points — V1/V2 (security-review,
+                 security-design, threat-model, dependency-audit,
+                 secrets-scan, security-validate,
+                 security-change-detection, security-gate) and V3
+                 (project-security-baseline, attack-surface-map,
+                 security-impact-analysis, attack-chain-analysis,
+                 adversarial-validation)
 agents/          portable role definitions (team lead, architect, reviewer,
                  validator, dependency auditor, secrets reviewer)
 plays/           authoritative step-by-step security procedures
 references/      authoritative technology/platform security knowledge
 templates/       output formats (finding, security report, threat model,
-                 security design)
+                 security design, project security baseline, attack
+                 surface map, attack chain)
 tools/           notes + wrappers for Semgrep, Gitleaks, OSV-Scanner, Trivy
 scripts/         windows/ (.ps1) and macos/ (.sh) install / scan / doctor
 integrations/    optional Codex- and Claude-specific accelerators
