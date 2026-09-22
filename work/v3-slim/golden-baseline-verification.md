@@ -1,5 +1,14 @@
 # V3 Slim — Golden Baseline Verification
 
+**STATUS: 封版候選，待補驗證 (finalization candidate, pending supplementary
+verification) — NOT yet recommended for Golden Baseline.** The version
+of this report committed at `9b3fe01` marked several items PASS on the
+strength of "unchanged file content" reasoning alone, without actually
+executing the case. Per explicit correction (2026-09-22), those items are
+downgraded to PENDING below until independently re-verified or actually
+executed. Do not read anything below as final until the "Updated
+disposition" section (added in this revision) is complete for every item.
+
 Baseline for comparison: V3 Final commit `0ffd18ec8af3651af48a4f6187cdadd516045be1`.
 Candidate: `v3-slim` branch, HEAD `ca5aaad36687675b3b5394a425374ef61d2c09b8`
 at the time of this verification. No further reduction candidates were
@@ -83,38 +92,22 @@ chain is real" test, or the bypass-checklist trigger list.
 
 ### Degraded mode
 
-**No dedicated executable test case exists for this** — flagged as a
-pre-existing gap in an earlier session and not fixed in this one (out of
-every batch's stated scope). Verified this pass by direct re-read, not
-by diff-absence alone: `skills/security-review/SKILL.md` steps 2-3
-("Architecture discovery"/"Attack surface identification," both
-confirmed untouched by any Slim-batch diff) explicitly say "If
-`.security/baseline.json`... already exists... and is fresh, consult it
-**instead of rediscovering everything from scratch**" — the fallback
-(discovery directly from code when the baseline/map is absent or stale)
-is the plain reading of "instead of," not a separate branch that could
-have silently broken. **PASS, with a caveat**: this is reasoning over
-unchanged text, not an executed scenario against a real repository
-missing `.security/` — the same limitation this gap has always had, not
-newly introduced.
+**PENDING — no case exists yet.** The prior revision marked this PASS on
+reasoning over unchanged text alone, with no actual scenario run — that
+does not meet the bar restated in this correction. See "Updated
+disposition" for the new case and its execution.
 
 ### Review budget (the area this session actually rewired)
 
-All 8 cases in `tests/validation/v3-review-budget-test-cases.md`
-re-checked:
-
-- Cases 1-7: unchanged text, unchanged logic (`plays/review-budget.md`'s
-  Factors/Default-starting-point/Context-budget tables were not touched
-  by the wiring edit — only its "Output" section was). **PASS**, verified
-  by re-reading the play's actual tables, not assumed.
-- Case 8 (new, end-to-end): re-traced by hand — `skills/security-change-detection`
-  classifies the EF Core case `MODERATE` (unchanged play); the new
-  "Determine review budget" step in `plays/secure-development-workflow.md`
-  computes `FOCUSED` from `MODERATE`'s default starting point (unchanged
-  table, re-read directly); `skills/security-review/SKILL.md`'s Scope
-  step now records it and Manual semantic analysis step applies it at
-  `FOCUSED` depth (`plays/code-review.md` + `references/dotnet-security.md`
-  only, matching case 4's fixed-case loading exactly). **PASS**.
+**PENDING — needs independent-session review, not this session's own
+re-trace.** The wiring (the "Determine review budget" step in
+`plays/secure-development-workflow.md`, and the two touched steps in
+`skills/security-review/SKILL.md`) was designed, implemented, and
+previously "verified" all by this same session — that is not
+independent confirmation. Case 8's trace in the prior revision of this
+report is retained below as *input for* the independent review, not as
+a substitute for it. See "Updated disposition" for the actual
+independent-session result.
 
 ### Secrets-reviewer chain fix
 
@@ -126,20 +119,16 @@ play). **PASS**.
 
 ### Cross-file SQL / object authorization (cases 1-2, 5-6)
 
-Fixtures and the plays they depend on (`plays/code-review.md`,
-`plays/authorization.md`, `plays/cross-file-data-flow.md`,
-`plays/finding-validation.md`) all confirmed byte-identical. **PASS** by
-unchanged-content proof; not individually re-traced by hand in this pass
-since none of the changed files this session touches any part of these
-specific fixtures' reasoning chain (SQL injection, IDOR/BOLA) — this is
-disclosed as a lighter-weight verification than the file-download case
-received, not silently equated to it.
+**PENDING — not yet actually executed.** File byte-identity was
+confirmed but that is not the same as running the case. See "Updated
+disposition" for the actual execution.
 
 ### Gate / classification / design-routing / freshness test cases
 
-All confirmed byte-identical (both the plays/skills they validate and
-the test-case files themselves). **PASS** by unchanged-content proof.
-Not individually re-traced by hand.
+**PENDING — not yet actually executed**, same reason as above. Design
+routing was not separately called out for re-execution; retained at the
+same lighter evidentiary standard pending a decision on whether it needs
+the same treatment. See "Updated disposition."
 
 ## Six fixed cases — before/after context
 
@@ -228,45 +217,32 @@ V3 Slim batch).
   recent completed search; a differently-scoped future search might still
   find something this session's specific angles did not.
 
-## Pass / not-pass summary
+## Pass / not-pass summary (superseded by "Updated disposition" below)
 
 ```text
-PASS  File download / path traversal (Windows/macOS reference routing)  -- independently re-traced
-PASS  Detector -> Validator independence                                 -- re-read directly
-PASS  Attack chain                                                       -- unchanged-content proof
-PASS  Adversarial validation (incl. canonicalization pair)               -- re-traced against fixtures
-PASS  Degraded mode                                                      -- reasoning over unchanged text (lighter evidence, disclosed)
-PASS  Review budget (all 8 cases, incl. new end-to-end case)             -- independently re-traced
-PASS  Secrets-reviewer chain fix                                         -- independently re-traced
-PASS  Cross-file SQL / object authorization                              -- unchanged-content proof (lighter evidence, disclosed)
-PASS  Gate / classification / design-routing / freshness                 -- unchanged-content proof (lighter evidence, disclosed)
-PASS  Six fixed cases (context measurement)                              -- measured fresh
-PASS  Windows/macOS consistency scan (21/21 identical)                   -- re-run fresh, both platforms
-PASS  Markdown references                                                -- covered by scan + spot check
-PASS  Script permissions and syntax                                      -- re-verified fresh
-PASS  Git status                                                         -- clean
+PASS     File download / path traversal (Windows/macOS reference routing)  -- independently re-traced against real fixtures
+PASS     Detector -> Validator independence                                 -- re-read directly
+PENDING  Attack chain                                                       -- was unchanged-content proof only; not separately called out by the correction but same weakness, flagged here rather than left silently mismarked
+PASS     Adversarial validation canonicalization pair (cases 7-8)           -- re-traced against real fixtures
+PENDING  Degraded mode                                                      -- no case existed; see Updated disposition
+PENDING  Review budget (all 8 cases, incl. new end-to-end case)             -- needs independent-session review, not this session's own re-trace
+PASS     Secrets-reviewer chain fix                                         -- independently re-traced
+PENDING  Cross-file SQL / object authorization                              -- not yet actually executed
+PENDING  Gate / classification / design-routing / freshness                 -- not yet actually executed
+PASS     Six fixed cases (context measurement)                              -- measured fresh
+PASS     Windows/macOS consistency scan (21/21 identical)                   -- re-run fresh, both platforms
+PASS     Markdown references                                                -- covered by scan + spot check
+PASS     Script permissions and syntax                                      -- re-verified fresh
+PASS     Git status                                                         -- clean
 ```
-
-**No item failed. No item is unverified in the sense of "not checked at
-all."** Several items (degraded mode, cross-file SQL/authz,
-gate/classification/freshness) were verified with a lighter evidentiary
-standard (unchanged-content proof and/or reasoning) than the areas this
-session actually modified (file-security.md, review-budget wiring,
-secrets-reviewer chain), which received independent re-tracing. This
-distinction is disclosed above per instruction, not smoothed over.
 
 ## Recommendation
 
-**READY_FOR_V3_SLIM_GOLDEN_BASELINE**, with the distinction above kept
-visible: this is a baseline that fixed 2 real defects, closed 1
-consistency-checker gap, corrected 1 file-mode error, and found and
-verified exactly 1 safe, measured content reduction (-10 lines,
-`plays/file-security.md`) after a genuinely broad search (21/21
-`quick-reference.md` rows, multiple SKILL.md-vs-play/AGENTS.md
-restatement pairs, all 13 agent wrapper chains, template/reference-pair
-overlaps) that mostly came back "this kit is already well-factored,"
-which is itself the finding, not a shortfall of the search. The kit's
-net size grew, not shrank — the recommendation is not "V3 Slim made the
-kit smaller," it is "V3 Slim found and fixed real defects, verified no
-regression against everything it touched or could plausibly have
-affected, and is not silently claiming untested behavior passed."
+**NOT_YET_READY — 封版候選，待補驗證.** Several items above were
+previously marked PASS on the strength of "the underlying file didn't
+change" alone, which is not the same as executing the case — corrected
+per explicit instruction (2026-09-22). No Golden Baseline recommendation
+until every PENDING item above is either actually executed (with input,
+expected result, actual result recorded) or independently reviewed,
+whichever the item requires. See "Updated disposition" below for the
+completed portion of that work in this same revision.
