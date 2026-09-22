@@ -79,6 +79,29 @@ Ran both `scripts/windows/consistency-check.ps1` and
 Both times: 21 hits, byte-identical between platforms, byte-identical
 before/after (the fixes did not introduce or remove any hit).
 
+**Correction (caught by the user re-running the scan against this
+report's own committed content, not by me):** after this file itself was
+committed, re-running the scan found **26** hits, not 21 — the 5 new ones
+were this report's own lines (86, 89, 92 twice, 94, in the version quoted
+above) quoting the STALE_TERM/VOCABULARY pattern text verbatim while
+reporting on it. Verified by diffing the 26-hit output against the 21-hit
+one before changing anything — confirmed all 5 new hits were exactly this
+file, nothing else. Fixed by excluding `work/` from both scripts'
+Markdown-scan prune list (`scripts/windows/consistency-check.ps1`'s
+`$MdPruneNames` and `scripts/macos/consistency-check.sh`'s `PRUNE_ARGS`),
+alongside `.git`/`node_modules`/`bin`/`obj`/`output`/`__pycache__` —
+`work/` holds session working notes and analysis reports, not this kit's
+own authored `plays`/`skills`/`templates`/`tests`, and is exactly the kind
+of content `plays/repository-consistency.md`'s own "Interpreting output"
+section already anticipates ("a Nit's own catalogue of past mistakes...
+will legitimately match... without being an instance of the mistake
+itself") — chose excluding it over documenting 5 recurring hits per report
+because every future analysis report written under `work/` would
+otherwise add more of the same noise indefinitely. Re-ran both scripts
+after the fix: back to 21 hits, byte-identical between platforms and
+identical in content to the original 21 documented below — confirming the
+fix removed exactly the 5 false hits and nothing else.
+
 ```text
 STALE_TERM (1)      plays/repository-consistency.md:101 — self-referential
                      worked example of the category's own output format,

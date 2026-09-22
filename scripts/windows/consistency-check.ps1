@@ -43,10 +43,15 @@ function Test-Pruned {
 }
 
 # Markdown/reference scans below never descend into generated/vendored
-# content. HYGIENE deliberately uses a narrower prune list (just
-# .git/node_modules) since __pycache__/*.pyc are exactly what it is
-# looking for — pruning them there would defeat the check.
-$MdPruneNames = @('.git', 'node_modules', 'bin', 'obj', 'output', '__pycache__')
+# content, or into work/ (session working notes and analysis reports —
+# not this kit's own authored plays/skills/templates/tests, and exactly
+# the kind of content that quotes a stale/vocabulary pattern verbatim
+# while reporting on it, which is not the same as containing the mistake
+# — see plays/repository-consistency.md's "Interpreting output"). HYGIENE
+# deliberately uses a narrower prune list (just .git/node_modules) since
+# __pycache__/*.pyc are exactly what it is looking for — pruning them
+# there would defeat the check.
+$MdPruneNames = @('.git', 'node_modules', 'bin', 'obj', 'output', '__pycache__', 'work')
 $HygienePruneNames = @('.git', 'node_modules')
 
 try {

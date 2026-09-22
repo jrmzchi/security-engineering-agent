@@ -51,8 +51,12 @@ if [ ! -f "$PATTERNS_FILE" ]; then
 fi
 
 # Directories this check never descends into — generated/vendored
-# content, not this kit's own authored Markdown.
-PRUNE_ARGS=( -path '*/.git' -o -path '*/node_modules' -o -path '*/bin' -o -path '*/obj' -o -path '*/output' -o -path '*/__pycache__' )
+# content, or work/ (session working notes and analysis reports, not
+# this kit's own authored Markdown — exactly the kind of content that
+# quotes a stale/vocabulary pattern verbatim while reporting on it,
+# which is not the same as containing the mistake; see
+# plays/repository-consistency.md's "Interpreting output").
+PRUNE_ARGS=( -path '*/.git' -o -path '*/node_modules' -o -path '*/bin' -o -path '*/obj' -o -path '*/output' -o -path '*/__pycache__' -o -path '*/work' )
 
 HITS=0
 declare -A SECTION_PRINTED
