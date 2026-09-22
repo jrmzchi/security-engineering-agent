@@ -138,18 +138,8 @@ another user's file, or overwrite a file the application depends on.
 
 ## Windows and macOS path semantics
 
-Consider both when the deployment target is cross-platform:
-
-```text
-Windows: case-insensitive filesystem by default, drive letters, UNC
-    paths, `\` and `/` both often accepted as separators, reserved
-    device names (CON, PRN, AUX, NUL, COM1...) as filenames can behave
-    unexpectedly
-macOS: case-insensitive-by-default (but case-preserving) on the common
-    default filesystem format, though case-sensitive volumes exist;
-    do not assume filename comparisons are safe across both without
-    checking
-```
-
-See `references/windows-security.md` and `references/macos-security.md`
-for platform-specific detail.
+Consider both when the deployment target is cross-platform — see
+`references/windows-security.md` and `references/macos-security.md` for
+the platform-specific detail (case-insensitivity's risk direction
+depending on denylist vs. allowlist checks, path-separator acceptance,
+drive letters/UNC paths, reserved device names, Unicode normalization).

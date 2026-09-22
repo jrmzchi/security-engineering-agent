@@ -26,7 +26,7 @@ conflated with the previous batch's tradeoff.
 |---|---|---|---|---|---|
 | 1 | CSS color change | NONE | — | 0 | 0 (budget step never reached) |
 | 2 | Remove `[Authorize]` from an ASP.NET controller | HIGH | `plays/authorization.md` (98) + `references/aspnet-security.md` (149) | 247 | 514 |
-| 3 | Authenticated file-download endpoint, user-supplied filename | HIGH | `plays/file-security.md` (155) + `references/aspnet-security.md` (149) + `references/windows-security.md` (117) + `plays/authorization.md` (98) | 519 | 786 |
+| 3 | Authenticated file-download endpoint, user-supplied filename | HIGH | `plays/file-security.md` (145, was 155 — trimmed in batch 7) + `references/aspnet-security.md` (149) + `references/windows-security.md` (117) + `plays/authorization.md` (98) | 509 (was 519) | 776 (was 786) |
 | 4 | New EF Core query for an existing, already-authorized report | MODERATE | `plays/code-review.md` (149) + `references/dotnet-security.md` (150) | 299 | 566 |
 | 5 | New dependency added to `package.json` | MODERATE | `plays/dependency-security.md` (83) | 83 | 350 |
 | 6 | Authentication middleware registration change | HIGH | `plays/authentication.md` (94) + `references/aspnet-security.md` (149) | 243 | 510 |
