@@ -93,7 +93,8 @@ file), case 1.
 
 ## Git
 
-Committed to `v3-slim` (hash below, filled in after commit).
+Committed to `v3-slim`: `e64ca164e9adcffd8fc21cb464530ef3d4180bf7`
+("fix: close secrets-reviewer chain gap for the candidate-evidence rule").
 
 ## Not done here
 
