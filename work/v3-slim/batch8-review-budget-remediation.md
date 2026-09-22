@@ -133,7 +133,69 @@ accurate text.
   `BROKEN_REFERENCE` category (unchanged, still the 7 disclosed negated
   references).
 
-## Independent review dispatch
+## Independent review verdict (commit `bd51424`)
 
-See "Independent review verdict" section below — dispatched separately,
-result appended once received.
+Dispatched to a fresh `code-reviewer` subagent with no prior context
+from this session. It located the fix commit itself via `git log`/`git
+show` (confirmed `bd51424`, confirmed it was HEAD, confirmed working
+tree clean) and read every downstream file it cited independently —
+`plays/code-review.md`, `plays/security-change-detection.md`,
+`plays/secure-development-workflow.md`, `plays/project-security-baseline.md`,
+`plays/security-impact-analysis.md`, `skills/security-change-detection/SKILL.md`,
+`tests/validation/classification-test-cases.md`,
+`tools/consistency-patterns.txt` — rather than trusting the commit
+message or the prior independent review's summary.
+
+**F1–F5, F7: all six CLOSED**, each with exact quotes and line numbers
+confirming the fix text actually exists and says what it needs to say
+(full quotes in the reviewer's own report, not reproduced here in full).
+Independently confirmed via its own `bash scripts/macos/consistency-check.sh`
+run (23 hits, matching this commit's own claim) and its own re-play of
+the `STALE_TERM`/`VOCABULARY` patterns against the before/after commits
+(9 -> 11 hits in the 4 changed files specifically, net +2 — it caught
+that this batch's own report had mis-added 21+3=23 instead of accounting
+for one old hit that stopped matching, a bookkeeping slip in the report
+text, not in the fix itself).
+
+**New findings from the fix batch itself** (none Blocker or Major):
+
+| # | Severity | Finding |
+|---|---|---|
+| N1 | Minor | The new "Explicit mode" section's DEEP->AUDIT citation pointed to "Renamed from the naming..." (lines 20-47), which never mentions `AUDIT` at all — the same defect *shape* as F1/F4 (citation correct in form, wrong in target), newly introduced in the same commit that fixed F1/F4. |
+| N2 | Minor | The Applicability matrix's MODERATE/HIGH cells said budget is "applied at Scope and Manual semantic analysis steps" — omitting `skills/security-review/SKILL.md` step 3, even though this same commit moved ELEVATED's map-neighbor consumption there. Three files (matrix, Context budget, the test file) disagreed on how many steps consume budget. |
+| N3 | Minor | The "move at most one level up or down" cap made the `MINIMAL`-budget-under-explicit-`DEEP` scenario (case 7/7b, and the play's own naming-collision worked example at lines 41-44) *unreachable* under the new Explicit-mode design, since `DEEP`'s fixed default (`AUDIT`) is 3 levels above `MINIMAL` and the cap only allows 1. |
+| N4 | Minor | "The floor this play cannot lower" claimed budget affects "how much material is loaded" for `DEEP`; "Context budget" separately claimed budget "never overrides what mode already committed to loading, in either direction" — directly opposed claims on the same axis, papered over by an activities-vs-loading split that the floor section's own wording didn't actually maintain. |
+| N5 | Minor | "Default starting point"'s new clarifying note said a `LOW` check that escalates mid-review applies the `LOW` row's own value; the Applicability matrix said escalation re-classifies to a *new, higher* row first. Two different algorithms for the same scenario, one section each, no case covering the escalation branch either way. |
+| N6 | Minor | The matrix's "invoked exclusively"/"never actually combine" wording is disproven by `skills/security-change-detection`'s own independent entry points (its own `SKILL.md` "When to use," a directly-callable Claude subagent wrapper, a direct Codex `README.md` reference) — an absolutist claim a future maintainer would likely trust and be wrong to. |
+| N11 | Minor | "Flag it for the domain-selection step to evaluate" named no step that exists anywhere in this kit by that name, and specified no landing point for the flag — non-silent in wording only, not actually operable or checkable. |
+| N7-N10 | Nit | Loose pointer wording, a scope gap for QUICK/STANDARD's own loading floor, a duplicate-word typo, and a bookkeeping slip in this batch's own working notes (the 21->23 hit-count arithmetic) — reviewer's own recommendation: not worth fixing (N7, N8, N10) or trivial to fix in passing (N9, the typo). |
+
+**Reviewer's own summary**: no Blocker, no safety guarantee actually
+narrowed (the direction was net-expansion — the floor section gained the
+DEEP-activity guarantee, nothing lost precision) — but 4 of the 6 new
+Minors (N2, N3, N5, N6) are products of the same "two/three/four
+documents describing one cross-cutting mechanism" structure the fix
+batch was built on, not simple typos. Its explicit, disclosed
+recommendation, **not acted on unilaterally**: consider consolidating
+review-budget's now-two parallel computation entry points (the
+workflow's step, and `SKILL.md`'s Scope-step "Explicit mode" path) into
+a single owning node, so reachability has only one place it can be read
+from — this is a real architectural option worth the user's judgment,
+not something this session decided on its own.
+
+## Remediation of the independent review's new findings (commit `8a64a7c`)
+
+Fixed N1, N2, N3+N4 (merged — same root scenario), N5, N6, N9 (typo),
+N11. Left N7, N8, N10 as-is, matching the reviewer's own "not worth
+fixing" assessment. **Self-verified by re-tracing all 17 test cases
+against the updated live text** (case 5's Factors-capped path and case
+7/7b's now-reachable uncapped explicit-mode path were both re-checked
+specifically, since N3's fix touches exactly that boundary) — **not**
+independently re-reviewed by a third fresh agent, since none of N1-N11
+were Blocker/Major and the instruction's mandatory-re-review trigger is
+specifically for those. This is disclosed as a narrower evidentiary
+standard than F1-F5/F7 received (two independent passes each), not
+presented as equivalent.
+
+Consistency scan re-run after this second fix (both platforms): still
+23 hits, no new hit, no hit lost.
