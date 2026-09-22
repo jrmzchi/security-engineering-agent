@@ -259,9 +259,11 @@ This play doesn't introduce its own artifact or finding format — its
 output is a level (`MINIMAL`/`FOCUSED`/`ELEVATED`/`AUDIT`) that informs
 how much of `skills/security-review`'s workflow to actually spend, and
 how much reference material to load while doing it. `AGENTS.md`'s
-"Before implementing a meaningful software change" step 1 now points
-here as one of the inputs that refines sensitivity classification, but
-no step in that workflow, and no step in
-`skills/security-review/SKILL.md`, actually instructs computing this
-level and applying it to scope the review — that specific invocation
-is left to a later integration batch.
+"Before implementing a meaningful software change" step 1 names this
+play as one of the inputs that refines sensitivity classification;
+`plays/secure-development-workflow.md`'s workflow diagram is where this
+level is actually computed (the "Determine review budget" step, between
+scanner selection and targeted review), and `skills/security-review/SKILL.md`'s
+"Scope" and "Manual semantic analysis" steps are where it is applied —
+see `tests/validation/v3-review-budget-test-cases.md`'s end-to-end case
+for a worked trace through all three.

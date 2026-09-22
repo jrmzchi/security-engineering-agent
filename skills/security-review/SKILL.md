@@ -39,7 +39,12 @@ Final findings
    `skills/security-change-detection`'s classification rather than
    picked directly, see `plays/secure-development-workflow.md`), and
    whether this is a diff-aware review (`git diff`) or a
-   full-repository review.
+   full-repository review. For a TARGETED review, also record the
+   review budget level (`plays/review-budget.md`) that workflow step
+   already computed — it controls how much material step 5 below
+   actually loads within the domains this step selects, never which
+   domains are selected (see that play's "Context budget" section for
+   the depth rules this skill does not restate).
 2. **Architecture discovery.** Identify languages/frameworks in play, entry
    points, trust boundaries, and which technology references apply
    (see "Progressive disclosure" below). If `.security/baseline.json`
@@ -57,10 +62,12 @@ Final findings
    Treat every scanner hit as a **candidate**, never a confirmed finding.
 5. **Manual semantic analysis.** Trace data flow for anything
    security-sensitive using the attack path model below. Open the
-   relevant play(s) from the table. When a candidate's source and sink
-   are in different files, use `plays/cross-file-data-flow.md`'s
-   explicit multi-hop procedure rather than stopping at the file
-   boundary.
+   relevant play(s) from the table, at the depth step 1's review budget
+   level specifies — see `plays/review-budget.md`'s "Context budget"
+   section for exactly what each level loads, not restated here. When a
+   candidate's source and sink are in different files, use
+   `plays/cross-file-data-flow.md`'s explicit multi-hop procedure rather
+   than stopping at the file boundary.
 6. **Potential findings.** Draft findings using `templates/finding.md`.
 7. **Validation.** Every HIGH/CRITICAL candidate MUST go through
    `skills/security-validate` before being reported as confirmed. Once

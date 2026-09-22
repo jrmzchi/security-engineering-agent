@@ -1,4 +1,15 @@
-# V3 Slim — Results (final)
+# V3 Slim — Results (first working session)
+
+> **Amendment (second working session, 2026-09-22, same day):** the "no
+> changes made to the kit" conclusion below was accurate for the
+> duplication-search work this file documents, but a follow-up task
+> ("V3 Slim 修正與封版任務") identified and fixed two additional, confirmed
+> defects — a git file-mode bug and the review-budget wiring gap this file
+> itself flags below as a known risk. Those fixes are real content changes
+> to the kit, reported separately in `session2-fixes-report.md`, not
+> retrofitted into this file's original conclusion. This file's own
+> duplication-search findings (0/21 quick-reference rows, the
+> adversarial-validation SKILL.md check) are unaffected and still stand.
 
 ## Executive result
 
@@ -69,22 +80,32 @@ own review workflow pays per the plan's own Phase 3.1 boundary ("V3 Slim
 | 1 | All 21 rows of `skills/security-review/references/quick-reference.md`, vs. their matching `skills/security-review/SKILL.md` coarse-table rows | `skills/security-review/SKILL.md:123-134`, `skills/security-review/references/quick-reference.md` (entire table) | Exhaustively checked (not sampled) after the API key was rotated 2026-09-22: 0 of 21 rows classified as redundant with the general table, 0 scored near "no added value." The deliberate negative control (line 28, `plays/finding-validation.md`) scored highest on both classification confidence and uniqueness of the whole set, validating the process. The single closest-to-borderline row (line 22, `[Authorize]`/role checks) was individually re-read by hand and still retained — it names a mechanism cue the coarse row's vulnerability-class wording doesn't. Full detail: `phase3-jev-calibration-record.md` (initial 7-row sample) and `phase3-jev-full-table-results.md` (complete 21-row table). |
 | 2 | `skills/adversarial-validation/SKILL.md`'s "## Results" section vs. `plays/adversarial-validation.md`'s "Results use existing vocabulary" + "Structured result metadata" sections | `skills/adversarial-validation/SKILL.md:44-67`, `plays/adversarial-validation.md:139-193,195-323` | Jev's own confidence on whether trimming was safe was 0.0 (flat distribution) — a "needs human review" signal per this plan's own rule, not something to act on regardless. Human re-read found the section plays the same "surface one load-bearing nuance before the reader opens the full play" role its two clean sibling SKILL.md files also play (compare `skills/security-gate/SKILL.md`'s "one rule that matters most"), just covering more ground. Removing it risks the exact unearned-confidence failure mode `plays/adversarial-validation.md`'s own "Sequential fallback" section warns against. |
 
-## 尚存風險 / known gaps found along the way (out of this pilot's scope)
+## 尚存風險 / known gaps found along the way
 
-### review-budget.md is under-wired, not over-duplicated
+### review-budget.md's wiring gap — since fixed (2026-09-22, second working session)
 
-`plays/review-budget.md:260-267` (its own "Output" section) states plainly:
-`AGENTS.md`'s workflow step 1 points to this play as an input, but no step
-in `plays/secure-development-workflow.md`, and no step in
+`plays/review-budget.md:260-267` (its own "Output" section) used to state
+plainly: `AGENTS.md`'s workflow step 1 points to this play as an input, but
+no step in `plays/secure-development-workflow.md`, and no step in
 `skills/security-review/SKILL.md`, actually computes this budget level or
 applies it to scope a review — "that specific invocation is left to a later
 integration batch." Found while checking whether review-budget was a good
-V3 Slim pilot candidate (it was not — its level vocabulary is defined in
-exactly one file, no cross-file duplication exists to trim there). This is
-the opposite problem from what V3 Slim looks for (a missing wire, not a
-redundant copy), so it is out of scope for this pilot's fixes. Recorded
-here per the user's instruction (2026-09-22) rather than opened as a
-separate task.
+V3 Slim pilot candidate (it was not, for a different reason — its level
+vocabulary is defined in exactly one file, no cross-file duplication
+exists to trim there).
+
+**This has since been fixed**, per explicit user instruction in a follow-up
+task (V3 Slim 修正與封版任務): `plays/secure-development-workflow.md`'s
+workflow diagram now has a "Determine review budget" step between scanner
+selection and targeted review, with a matching prose section pointing to
+`plays/review-budget.md` for the actual computation (not restating it);
+`skills/security-review/SKILL.md`'s "Scope" and "Manual semantic analysis"
+steps now record and apply that level. `plays/review-budget.md`'s own
+"Output" section was updated to point at this wiring instead of disclosing
+it as missing. New end-to-end test case (`tests/validation/v3-review-budget-test-cases.md`
+case 8) traces a concrete example (EF Core query -> MODERATE -> FOCUSED)
+through all three files. See the top-level report for this working
+session's full diff/commit.
 
 Side-finding: this exact phrasing ("left to a later integration batch") is
 not caught by `scripts/*/consistency-check.*`'s `STALE_TERM` pattern for

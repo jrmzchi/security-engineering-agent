@@ -29,6 +29,9 @@ Select relevant security domains (skills/security-review's "Where to
         |
 Select justified scanners (plays/scanner-selection.md)
         |
+Determine review budget (plays/review-budget.md) -- depth only, never
+    which domains
+        |
 Targeted security review (skills/security-review)
         |
 Candidate findings
@@ -118,6 +121,21 @@ Run `skills/security-change-detection` again against what was actually
 built. A request classified MODERATE from intent can come out HIGH once
 the actual code is visible (or vice versa) — the workflow branches on
 the *later* classification for what review/gate steps are required.
+
+## Review budget: computed here, defined in plays/review-budget.md
+
+Immediately after scanner selection and before targeted review starts,
+compute `plays/review-budget.md`'s level (`MINIMAL`/`FOCUSED`/`ELEVATED`/
+`AUDIT`) from the (re-)classification just established, using that
+play's "Default starting point" table and Factors as the actual
+procedure — this workflow does not restate either. The result governs
+how much material `skills/security-review`'s targeted review step loads
+within the domains already selected above (see that skill's "Scope"
+step) — it never changes which domains are selected, and never lowers
+what `plays/finding-validation.md`'s independent-validation requirement
+(via `skills/security-validate`) or an explicitly requested `DEEP`
+review mode already demand (see `plays/review-budget.md`'s "The floor
+this play cannot lower").
 
 ## Targeted review
 
