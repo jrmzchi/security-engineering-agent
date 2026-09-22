@@ -20,7 +20,13 @@ For each hit, determine: real vs. example/test value, active vs.
     untracked/staged-only, and exposure history
 ```
 
-## Non-negotiable rule
+## Non-negotiable rules
+
+A Gitleaks (or manual-fallback) hit is candidate evidence, never a
+confirmed secret on its own — see `AGENTS.md`'s own "Non-negotiable
+rules" for this principle generally, and apply
+`plays/secrets-security.md`'s "Before reporting a hit, determine" checks
+before treating any hit as a finding.
 
 Never print full secrets in any report, log, or output. Always redact
 (`sk-proj-abc...xyz`). This applies even when the secret itself is the
