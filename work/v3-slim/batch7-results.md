@@ -137,7 +137,8 @@ instruction.
 
 ## Git
 
-Committed to `v3-slim` (hash filled in after commit).
+Committed to `v3-slim`: `b5635613216ec43f492ed690c0205c5edc219ecc`
+("feat: trim plays/file-security.md's redundant Windows/macOS path summary").
 
 ## Not done here
 
