@@ -112,11 +112,15 @@ independently-revertible history — the file-mode fix and the wiring fix
 are unrelated changes):
 
 ```text
-<commit 1 hash>  fix: mark scripts/macos/consistency-check.sh executable
-<commit 2 hash>  feat: wire review-budget computation into the security-review workflow
+67f26bdc393246a90912362dd7dc0d12eade8dd8  fix: mark scripts/macos/consistency-check.sh executable
+fbc19c3705bcea2fbad7c3515d1dd0f66aafe92e  feat: wire review-budget computation into the security-review workflow
 ```
 
-(Hashes filled in after commit, below.)
+Both on `v3-slim`, author/committer `jrmzchi` (matching the
+identity fix applied earlier in this project's session history — this
+machine auto-detects a different name/email that the user asked not to
+use). File mode verified with `git ls-files -s` after commit 1:
+`100755 f0e549c...` — persists correctly.
 
 ## Not done here (left for the full Slim pass)
 
