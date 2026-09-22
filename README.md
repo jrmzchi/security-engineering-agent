@@ -11,6 +11,55 @@ on Windows or macOS, and does not depend on any Claude-specific feature
 (subagents, skills, plugins, hooks) for its core security behavior — those
 are optional accelerators layered on top.
 
+## Release status and roadmap
+
+- **V3 Final** is on `master` (`0ffd18e`). It is the complete V3 security
+  capability baseline.
+- **V3 Slim Golden Baseline** is on `v3-slim`, tagged
+  `v3-slim-golden-baseline` (`f5502cd`). It preserves the validated V3
+  behavior and includes workflow fixes and regression checks. It has **not**
+  demonstrated an overall reduction in AI token use: the kit is 424 lines
+  larger than V3 Final, and the one verified local reduction is a
+  file-download review route that loads 509 rather than 519 lines.
+- **V4 is planned, not implemented.** Its design is still under review;
+  the features below are goals, not capabilities of the current release.
+
+## Planned V4: Adaptive Security Intelligence & Orchestration
+
+V4 aims to select the security work and context each task needs while
+preserving V3's security findings, independent validation, and gate
+behavior. It has two connected parts:
+
+1. **Adaptive Security Orchestration.** A typed Context Manifest will
+   describe the selected security domains, Skills, Plays, References,
+   scanners, priorities, and review budget. When available, TypeSafe Jev
+   may help make these routing decisions. Jev will not confirm a
+   vulnerability, decide exploitability or remediation correctness, or
+   issue a Security Gate result.
+2. **Adaptive Project Security Intelligence.** Evidence-backed security
+   facts and controls will record their scope, dependencies, confidence,
+   freshness, and invalidation conditions. Reviews may reuse still-valid
+   evidence and selectively revalidate what a change has affected.
+   Feedback from rejected candidates and human-discovered misses will
+   retain the supporting reasons and scope rather than become permanent
+   ignore rules.
+
+**A Jev token will be optional.** Without one, an included decision path
+must produce the same Context Manifest format and run the same security
+review, validation, and gate workflow. Missing or failed Jev calls must
+fall back safely; essential security checks cannot depend on Jev.
+
+A separate V4 capability is planned to review how an application uses
+enterprise AD/SSO: trust and validation of login results, authorization
+after login, safe directory connections and credentials, and failure
+behavior. This is application integration review, not an audit of an
+entire enterprise identity environment.
+
+V4 will be assessed against the validated V3 baseline using security
+regression cases and measured context, actual AI tokens, repeated
+reasoning, unnecessary scans, latency, and cost. Jev routing and evidence
+reuse will be measured separately. A later "V4 Slim" pass is only a
+possibility if those measurements reveal specific remaining waste.
 ## What this project does
 
 ```text
