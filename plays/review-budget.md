@@ -154,9 +154,13 @@ This is a lookup definition, exercised only when a live review actually
 reaches this play — see "Applicability matrix" under "Output" below for
 exactly which sensitivity/mode combinations that is. A `NONE`- or
 `LOW`-classified change typically has no live review to apply the NONE/LOW
-row to at all; the rows exist for completeness and for the rare case
-where a lightweight `LOW` check escalates mid-review, not because every
-sensitivity value is computed and applied on every change.
+row to at all — the rows exist for completeness, not because every
+sensitivity value is computed and applied on every change. When a
+lightweight `LOW` check surfaces something suspicious
+(`plays/security-change-detection.md`'s own "Re-classify from the actual
+diff" step), the change gets re-classified to whatever the evidence now
+supports — `MODERATE` or `HIGH` — and *that* row applies; the original
+`LOW` row is never itself applied to a live review, escalated or not.
 
 ```text
 NONE sensitivity      -> MINIMAL
@@ -231,12 +235,14 @@ before it can be called `CONFIRMED` (skipping straight to `CONFIRMED`
 without that step is exactly the shortcut `plays/finding-validation.md`
 exists to prevent), and still gates the same way once validated. A
 `MINIMAL`-budget change reviewed under an explicitly requested `DEEP`
-mode still performs every one of that mode's activities — budget affects
-how much material is loaded and how much scrutiny is applied *within*
-those activities, not whether an activity happens at all. Budget affects
-how much is spent looking, not what happens if something serious is
-found anyway, and never removes an activity a mode already committed to
-performing.
+mode still performs every one of that mode's activities and still loads
+everything those activities require (see "Context budget" below for the
+loading guarantee specifically — this section covers *whether an
+activity happens at all*, not how much it loads, which is that other
+section's claim alone, to avoid two sections making overlapping claims
+about the same thing). Budget affects how much scrutiny is applied
+within an activity that happens regardless, not whether it happens, and
+never removes an activity a mode already committed to performing.
 
 ## Context budget
 
@@ -267,10 +273,19 @@ ELEVATED          the identified domain(s)' full depth of reference
                   *outside* those domains, do not silently load it
                   (budget never expands the domain set) and do not
                   silently drop it either (it is still a real structural
-                  signal) — flag it for the domain-selection step to
-                  evaluate, the same way `plays/security-impact-analysis.md`'s
-                  `POTENTIAL` classification surfaces something for
-                  confirmation rather than deciding it either way
+                  signal) — since domain selection
+                  (`plays/secure-development-workflow.md`'s "Select
+                  relevant security domains" step / this skill's Scope
+                  step, both already completed by the time this step
+                  runs) does not re-run mid-review, record the neighbor
+                  as a noted, unresolved cross-domain signal in this
+                  review's completion summary or the relevant finding's
+                  evidence section (whichever exists), the same way
+                  `plays/security-impact-analysis.md`'s `POTENTIAL`
+                  classification surfaces something for confirmation
+                  rather than deciding it either way — do not silently
+                  drop it just because there is no automatic re-selection
+                  mechanism
 
 AUDIT             whatever DEEP review mode already requires loading;
                   this level doesn't add anything mode wasn't already
@@ -287,21 +302,32 @@ and both hold.
 
 ## Applicability matrix: which sensitivity/mode combinations actually compute and apply a budget
 
-Sensitivity (`NONE`/`LOW`/`MODERATE`/`HIGH`) is only ever produced by
-`skills/security-change-detection`, invoked exclusively from
-`plays/secure-development-workflow.md`'s proactive workflow. An
-explicitly requested `QUICK`/`STANDARD`/`DEEP` review
-(`plays/code-review.md`'s "Review modes") never goes through that
-workflow or that classifier — see that workflow's own "This does not
-replace explicit workflows" section and `plays/code-review.md`'s
-`TARGETED` note ("Not something a user picks explicitly... it's the
-mode the proactive workflow uses on its own"). Sensitivity and an
-explicitly-requested mode therefore never actually combine in this
-kit's mechanism; the table below reflects that rather than forcing 16
-independently-computed cells, and does not restate the actual
-MINIMAL/FOCUSED/ELEVATED/AUDIT values already defined in "Default
-starting point" above — only where (or whether) that lookup is ever
-reached.
+`skills/security-change-detection` is usually invoked from
+`plays/secure-development-workflow.md`'s proactive workflow, but it also
+has its own independent entry points (its own `SKILL.md` "When to use,"
+a directly-callable subagent wrapper) — a user or agent *can* run it on
+its own outside that workflow. What this play's computation actually
+depends on is narrower: **this play's own workflow-driven computation
+point** (`plays/secure-development-workflow.md`'s "Determine review
+budget" step) only ever receives a sensitivity value from that
+workflow's own classification step, and an explicitly requested
+`QUICK`/`STANDARD`/`DEEP` review (`plays/code-review.md`'s "Review
+modes") never passes through that workflow step at all — see that
+workflow's own "This does not replace explicit workflows" section and
+`plays/code-review.md`'s `TARGETED` note ("Not something a user picks
+explicitly... it's the mode the proactive workflow uses on its own").
+So *this play's* sensitivity-driven computation and an
+explicitly-requested mode do not combine, even though the classifier
+itself can be invoked independently for other purposes; the table below
+reflects that narrower claim rather than forcing 16 independently-computed
+cells, and does not restate the actual MINIMAL/FOCUSED/ELEVATED/AUDIT
+values already defined in "Default starting point" above — only where
+(or whether) that lookup is ever reached. If a sensitivity value from an
+independent classifier invocation is available when an explicit
+`QUICK`/`STANDARD`/`DEEP` review is also requested, "Explicit mode"
+below's Factors-adjustment step is where a reviewer can fold that
+information in manually — it does not change which entry point computes
+the starting default.
 
 ```text
           QUICK/STANDARD/DEEP (explicit)     TARGETED (proactive workflow)
@@ -322,12 +348,22 @@ MODERATE  N/A, same reason                   REACHABLE — computed at
                                               workflow.md's "Determine review
                                               budget" step, applied at
                                               skills/security-review/SKILL.md's
-                                              Scope and Manual semantic
-                                              analysis steps. Value: "Default
-                                              starting point" above.
-HIGH      N/A, same reason                   REACHABLE, same entry point.
+                                              Scope, Attack surface
+                                              identification (ELEVATED's map-
+                                              neighbor pull, when reached —
+                                              see "Context budget" below), and
+                                              Manual semantic analysis steps.
                                               Value: "Default starting point"
-                                              above. Mandatory security-design
+                                              above.
+HIGH      N/A, same reason                   REACHABLE, same entry point and
+                                              same three consuming steps.
+                                              Value: "Default starting point"
+                                              above (typically ELEVATED,
+                                              making the Attack surface
+                                              identification step's
+                                              map-neighbor pull actually
+                                              apply here in practice).
+                                              Mandatory security-design
                                               (pre-code HIGH) is a separate,
                                               budget-independent gate — see
                                               "The floor this play cannot
@@ -350,16 +386,26 @@ QUICK (explicit)      -> FOCUSED — no sensitivity signal exists to
 STANDARD (explicit)    -> FOCUSED, same reasoning
 DEEP (explicit)         -> AUDIT — see "Context budget" above for why
                           this is a no-op safety cap, not a new
-                          restriction, and "Renamed from the naming..."
-                          above for AUDIT already being defined to cover
-                          exactly this case
+                          restriction, and "Default starting point"
+                          above ("...or for an explicit DEEP-mode/
+                          release-audit request") for AUDIT already
+                          being defined to cover exactly this case
 ```
 
 The Factors above can still adjust this starting point if information
-relevant to them is available (e.g. a known baseline confidence fact) —
-absent that, FOCUSED/AUDIT are the defaults for these three modes
-specifically, not derived from a sensitivity label that was never
-computed for them.
+relevant to them is available (e.g. a known baseline confidence fact).
+**The "move at most one level up or down" cap in "Default starting
+point" above applies to the *sensitivity*-driven default specifically —
+it exists to keep a Factor from silently overriding a considered
+sensitivity classification. It does not apply here**, since these three
+modes' defaults have no sensitivity classification to bound movement
+against. An explicit `DEEP` request that turns out to touch nothing
+security-sensitive can move from the `AUDIT` starting point all the way
+down to `MINIMAL` if the Factors genuinely support it (this is the exact
+scenario "Renamed from the naming..." above and `tests/validation/v3-review-budget-test-cases.md`'s
+case 7/7b exist to test) — absent such a case, `FOCUSED`/`AUDIT` remain
+the defaults for these three modes, not derived from a sensitivity label
+that was never computed for them.
 
 ## Output
 

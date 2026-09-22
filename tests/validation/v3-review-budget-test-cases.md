@@ -60,7 +60,7 @@ apart from "right level, but this specific file wasn't needed."
 | (a) Classification | `skills/security-change-detection` classifies the case-3 change (new EF Core query) `MODERATE`, per `tests/validation/classification-test-cases.md`'s matching case |
 | (b) Level computed | `plays/secure-development-workflow.md`'s "Determine review budget" step computes `FOCUSED` from `MODERATE`'s Default starting point; no Factor here (no external exposure change, no privilege change, no attack-surface centrality signal) moves it |
 | (c) Recorded | `skills/security-review/SKILL.md`'s Scope step records `FOCUSED` alongside `TARGETED` mode |
-| (d) Loaded (conditional, not a fixed list) | `plays/code-review.md` (the domain domain-selection already picked) is loaded. `references/dotnet-security.md` is loaded **only if** the manual semantic analysis actually needs a stack-specific detail to resolve a question about this EF Core query (`plays/review-budget.md`'s `MINIMAL`/`FOCUSED` row: "reference material only as needed to resolve a specific question" — not an unconditional load). No full-reference-depth material and no attack-surface-map-neighbor expansion (both `ELEVATED`-only per "Context budget"), and no domain outside what domain selection already picked. |
+| (d) Loaded (conditional, not a fixed list) | `plays/code-review.md` (the domain domain selection already picked) is loaded. `references/dotnet-security.md` is loaded **only if** the manual semantic analysis actually needs a stack-specific detail to resolve a question about this EF Core query (`plays/review-budget.md`'s `MINIMAL`/`FOCUSED` row: "reference material only as needed to resolve a specific question" — not an unconditional load). No full-reference-depth material and no attack-surface-map-neighbor expansion (both `ELEVATED`-only per "Context budget"), and no domain outside what domain selection already picked. |
 
 ### Case 13: HIGH change, same trace shape, different observable result (the counter-example F5 required)
 
@@ -91,7 +91,7 @@ a `FOCUSED` case against an `ELEVATED` one, which do differ observably.
 | Step | Expected result |
 |---|---|
 | Setup | A `HIGH`-sensitivity change to an authentication middleware component computes `ELEVATED` (per case 5's shape). `.security/attack-surface.json` exists and shows a directly-connected neighbor node that belongs to a domain (e.g. a file-storage `SERVICE` node) domain selection did **not** pick for this change (domain selection picked only `authentication`). |
-| Expected | The neighbor is neither silently loaded (would violate "budget never expands the domain set") nor silently dropped (would lose a real structural signal) — it is flagged for the domain-selection step to reconsider, per `plays/review-budget.md`'s updated "Context budget" ELEVATED row and `skills/security-review/SKILL.md`'s step 3 |
+| Expected | The neighbor is neither silently loaded (would violate "budget never expands the domain set") nor silently dropped (would lose a real structural signal) — since domain selection does not re-run mid-review, it is recorded as a noted, unresolved cross-domain signal in the review's completion summary or the relevant finding's evidence section, per `plays/review-budget.md`'s updated "Context budget" ELEVATED row and `skills/security-review/SKILL.md`'s step 3 |
 
 ## NONE/LOW sensitivity — explicitly confirming "no live review" is not silently treated as MINIMAL
 
