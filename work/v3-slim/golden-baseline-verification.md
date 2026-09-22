@@ -20,6 +20,21 @@ how this status was reached, in order:
    trigger is specifically for those; disclosed as a narrower
    evidentiary standard than the two-pass F1-F5/F7 verification, not
    equated to it). Full detail: `batch8-review-budget-remediation.md`.
+4. **Closeout batch (this revision, 2026-09-22)**: the two remaining
+   test suites that had not been separately executed —
+   `tests/validation/v3-attack-chain-test-cases.md` (positive + negative
+   case) and `tests/validation/design-routing-test-cases.md` (all 7
+   cases) — were actually traced against live play text and cited
+   fixtures; both **7/7 and 2/2 PASS** (see "Updated disposition" ->
+   "Attack chain" / "Design routing"). The independent reviewer's
+   architectural suggestion to consolidate review-budget's two parallel
+   computation entry points was formally disposed of — confirmed still
+   open, not a proven defect; not merged this batch; see "Architectural
+   suggestion disposition" below. No new reduction candidates were
+   searched for and no security rule was changed, per this batch's own
+   instruction. Git status, both consistency-check scripts (23/23,
+   unchanged), and the net-line figures below were all re-verified fresh
+   rather than carried over from the prior revision.
 
 **Net lines, restated because this batch changed them — do not use the
 earlier +120 figure.** `git diff 0ffd18ec..HEAD -- . ':!work' --shortstat`:
@@ -38,10 +53,15 @@ introduced review-budget defect now itself fixed after 2 review rounds,
 found exactly one small, verified-safe content reduction.
 
 Baseline for comparison: V3 Final commit `0ffd18ec8af3651af48a4f6187cdadd516045be1`.
-Candidate: `v3-slim` branch, HEAD `8a64a7cea8431657b899ae0d6c84067ec91b9efa`
-(prior to the docs-only commits that follow it) at the time of this final
-update. No further reduction candidates were searched for in this pass,
-per instruction.
+Candidate: `v3-slim` branch. The net-line figures above were
+re-confirmed fresh on 2026-09-22 (`git diff 0ffd18ec..HEAD -- . ':!work'
+--shortstat`, run again against this closeout revision's own HEAD, not
+carried over from an earlier commit) and are unchanged: **12 files
+changed, +501/-77, net +424** — this closeout batch's own edits are
+confined to `work/v3-slim/` (this file), which the `:!work` exclusion
+already omits from the kit-wide figure. No further reduction candidates
+were searched for and no security rule was changed in this pass, per
+instruction.
 
 ## What actually changed (full diff, verified fresh)
 
@@ -117,7 +137,10 @@ only by diff absence.
 `tests/validation/v3-attack-chain-test-cases.md` and
 `v3-adversarial-test-cases.md` also byte-identical. **PASS** — no
 mechanism this session touched affects chain construction, the "When a
-chain is real" test, or the bypass-checklist trigger list.
+chain is real" test, or the bypass-checklist trigger list. This
+byte-identity reasoning was subsequently strengthened by actual case
+execution in the closeout batch — see "Updated disposition" -> "Attack
+chain" below for the traced positive/negative case results.
 
 ### Degraded mode
 
@@ -154,10 +177,11 @@ disposition" for the actual execution.
 
 ### Gate / classification / design-routing / freshness test cases
 
-**PENDING — not yet actually executed**, same reason as above. Design
-routing was not separately called out for re-execution; retained at the
-same lighter evidentiary standard pending a decision on whether it needs
-the same treatment. See "Updated disposition."
+Gate/classification/freshness: **PENDING at the time of this section —
+see "Updated disposition" for the actual execution (all PASS).**
+Design routing: was not separately called out for re-execution in the
+prior revision; actually executed in the closeout batch (all 7 cases) —
+see "Updated disposition" -> "Design routing" for the traced results.
 
 ## Six fixed cases — before/after context
 
@@ -361,6 +385,45 @@ fixture (above) — confirming the fallback in `skills/security-review/SKILL.md`
 steps 2-3 does not under-detect relative to the baseline-assisted path.
 **PASS.**
 
+### Attack chain (`tests/validation/v3-attack-chain-test-cases.md`)
+
+Version: files confirmed byte-identical both versions (see "What
+actually changed" above — `plays/attack-chain-analysis.md`,
+`skills/attack-chain-analysis/SKILL.md`, and this test file itself are
+all untouched by V3 Slim). This upgrades the earlier "PASS — unaffected,
+verified by direct re-read" note (above, under "Attack chain /
+adversarial validation") from file-identity reasoning to an actually
+re-traced case, per instruction not to substitute "file didn't change"
+for case execution.
+
+| Case | Input | Expected | Actual (traced by hand, just now) | Result |
+|---|---|---|---|---|
+| Positive | `tests/fixtures/cross_file_object_authz_unsafe/` (same 3 files as the cross-file BOLA case above) — an INFORMATIONAL "sequential IDs" finding plus a HIGH "missing object-level authorization" finding | Chained into a CRITICAL combined finding via `plays/attack-chain-analysis.md`'s "When a chain is real" test | Applied the play's own test: does exploiting the first finding (sequential, guessable report IDs) actually enable reaching the second (no ownership check on `GetReport`)? Yes — the sequential-ID finding is what turns "one report I'm not supposed to see" (a bounded IDOR) into "every report in the system" (unbounded enumeration), the same "Chain severity != max(component severities)" shape as the play's own upload+execution-directory worked example. Preconditions (any authenticated user, no special access), Ordered steps (enumerate ID -> request report -> no ownership check -> data returned), Boundary transitions (none — single trust boundary, amplified not escalated), Combined impact CRITICAL, Confidence bounded by the weaker of the two components (both HIGH) | **PASS**, with one disclosed nuance: this fixture pair's "chain" is a same-boundary amplification rather than a multi-boundary-transition chain like the play's canonical worked example — the "Required fields" table still applies cleanly (Boundary transitions can genuinely be "none"), but it is a lighter-weight instance of the mechanism. Previously identified and disclosed earlier this session, not new. |
+| Negative | `tests/fixtures/xss_unsafe.js` (client-side reflected XSS via `URLSearchParams` -> `innerHTML`, read in full) + `tests/fixtures/cors_wildcard_credentials_unsafe.js` (Express middleware reflecting `Origin` + `Access-Control-Allow-Credentials: true`, server-side only, read in full) | No chain — genuinely unrelated findings | Same test applied: does exploiting the XSS finding enable reaching the CORS finding, or vice versa? No — different files, different layers (client-only vs. server-only), no shared code path, no shared data, no shared control flow. Confirmed by reading both fixtures in full | **PASS** |
+
+### Design routing (`tests/validation/design-routing-test-cases.md`, all 7 cases)
+
+Version: `skills/security-design/SKILL.md` and `plays/security-design.md`
+confirmed byte-identical both versions (neither appears in the "What
+actually changed" diff). Re-read both in full and traced all 7 cases
+against the live activation list (`skills/security-design/SKILL.md`'s
+"When to use") and the live nine-question procedure
+(`plays/security-design.md`), plus the specific fixtures the test cases
+cite as evidence, rather than reasoning from the test document's own
+stated answers.
+
+| Case | Request | Expected | Actual (traced against live text/fixtures) | Result |
+|---|---|---|---|---|
+| 1 | "Add a file download API" | Yes -> file security, object-level authorization, path handling | "file download" is on the live activation list verbatim; `plays/file-security.md` and `plays/authorization.md` both cover exactly this combination (confirmed earlier this session) | **PASS** |
+| 2 | "Add password reset" | Yes -> authentication, token handling, sensitive data | "credential handling" is on the live activation list. `plays/authentication.md` confirmed (fresh `grep` this turn) to have its own `## Insecure password reset` section at line 67, directly matching | **PASS** |
+| 3 | "Add a CSS animation" | No | Not on the 17-item activation list; matches `plays/security-change-detection.md`'s live NONE list ("non-security CSS, purely visual layout") | **PASS** |
+| 4 | "Add outbound URL fetch from user input" | Yes -> SSRF/network security, per `ssrf_user_url_unsafe.py`/`ssrf_allowlist_safe.py` | "external HTTP requests" is on the live activation list. Read `ssrf_user_url_unsafe.py` in full this turn: an attacker-supplied `image_url` fetched with no allowlist/scheme/IP check, explicitly citing `plays/api-security.md`'s "External APIs / webhooks / SSRF (CWE-918)" section — confirmed that section exists (fresh `grep`, line 67) | **PASS** |
+| 5 | "Add an admin-only delete endpoint" | Yes -> authentication, authorization (object- and function-level), per `authorization_removed_unsafe.cs` | "admin functionality" and "authorization" are both on the live activation list. Read `authorization_removed_unsafe.cs` in full this turn: `[Authorize(Roles="Admin")]` removed from exactly a `DELETE /admin/users/{userId}` endpoint — directly evidences the function-level half. The object-level half is not separately demonstrated by this specific fixture (an admin-delete endpoint has no per-object ownership dimension in this fixture's model) but is still correctly named in the expected focus, since `plays/security-design.md`'s own question 6 requires asking about both dimensions for every privileged operation regardless of which one a given fixture happens to illustrate | **PASS**, object-level nuance disclosed above |
+| 6 | "Add a new database query for an existing, already-authorized report" | Yes (lightweight) — activation list and sensitivity level are independent signals | "database operations" is on the live activation list. Fresh `grep` confirmed `plays/security-change-detection.md`'s live MODERATE section (lines 51-57) states, close to verbatim: "Also check `skills/security-design`'s own activation list independently of this level: several MODERATE items here (APIs, database-query changes, ...) also appear on that skill's trigger list ... Run design when either list says to" — the exact mechanism the test case cites, confirmed present and unchanged | **PASS** |
+| 7 | "Rename a private helper method" | No | Not on the activation list. Closest live NONE-list entry is "internal variable rename with no behavior change" (line 15) — a method rename is not a verbatim match but the same shape (identifier-only change, no interface/behavior/security-boundary change, doubly so for a private method with no external callers), so the classification holds by direct analogy rather than an exact quote; disclosed as such | **PASS**, analogy disclosed above |
+
+**7/7 PASS.**
+
 ### Review budget wiring — independent session review
 
 **Dispatched to an independent `code-reviewer` subagent** (not this
@@ -500,6 +563,84 @@ accurate summary to carry forward: **found real defects, closed them
 with independent verification, found little to cut, and is not
 claiming the kit got smaller.**
 
+## Architectural suggestion disposition: review-budget's two parallel entry points (per explicit instruction)
+
+The second independent review (see "Review budget wiring — independent
+session review" above, and the "Open item, not acted on unilaterally"
+note already recorded there) identified that `plays/review-budget.md`
+now has two separate places that compute a budget level:
+`plays/secure-development-workflow.md`'s "Determine review budget" step
+(TARGETED path, driven by `skills/security-change-detection`'s
+sensitivity output) and `skills/security-review/SKILL.md`'s Scope step
+"Explicit mode" branch (QUICK/STANDARD/DEEP, driven directly by the
+requested mode, with no sensitivity input at all). It suggested these
+could be consolidated into one owning computation point. This section
+formally records that suggestion's disposition, per instruction, rather
+than leaving it only as the brief note recorded earlier.
+
+**Status: still an open architectural improvement, not a proven
+defect.** Supporting evidence: this batch's 17-case execution
+(`tests/validation/v3-review-budget-test-cases.md`, see "Updated
+disposition" above / `batch8-review-budget-remediation.md`) already
+exercises both entry points directly — cases 1-6 and 12-14 through the
+TARGETED/workflow path, cases 9-11 through the Explicit-mode/Scope-step
+path — and found no case where the two entry points disagree, compute
+inconsistent results for the same input, or interfere with each other.
+Today's fresh attack-chain and design-routing case executions did not
+newly exercise review-budget at all (neither test document computes a
+budget level), so they add no new evidence either way on this specific
+question. If future case testing ever found the two entry points
+producing genuinely contradictory results for a request that could
+plausibly reach either one, that would change this from an open
+improvement to a confirmed defect and would block Golden Baseline until
+fixed — that has not happened.
+
+**Why not merged in this batch**: (1) this batch's own instruction was
+explicit — no new reduction candidates, no security-rule changes, finish
+the two outstanding test suites and close out Golden Baseline; a
+structural merge of the two entry points is exactly the kind of change
+that instruction excludes. (2) The two entry points do not actually
+overlap in the inputs they handle (see next paragraph) — merging them
+would require a single computation point that branches internally on
+"do I have a sensitivity value or an explicit mode," which is a real
+design decision (does the merged node live in the workflow file, the
+SKILL.md, or a new shared location? what happens to the two files' now
+separate prose for each path?) that the reviewer itself flagged as
+needing human judgment, not something to decide unilaterally inside a
+closeout batch.
+
+**Which situations each current entry point serves**:
+- `plays/secure-development-workflow.md`'s "Determine review budget" step
+  (TARGETED path): ordinary development changes going through the
+  proactive workflow, where `skills/security-change-detection` has
+  already produced a sensitivity level (NONE/LOW/MODERATE/HIGH) as part
+  of classifying the actual diff. Exercised by cases 1-6 and 12-14.
+- `skills/security-review/SKILL.md`'s Scope step "Explicit mode" branch:
+  a user directly requesting "QUICK/STANDARD/DEEP security review,"
+  where there is no diff-classification step in play at all and
+  therefore no sensitivity value to drive a computation from — the level
+  is computed straight from the requested mode instead. Exercised by
+  cases 9-11.
+
+Both paths ultimately consult the same authoritative level definitions
+in `plays/review-budget.md` (`Levels`, `Default starting point`,
+`Context budget`) — the duplication the reviewer flagged is in the two
+*entry* mechanisms (where a level gets computed from), not in what a
+given level means once computed.
+
+**Deferred to V4**: evaluate whether the two entry points can be merged
+into a single computation node that both the TARGETED workflow and an
+explicit-mode request call into (passing either a sensitivity value or
+an explicit mode as its input), reducing the applicability matrix from
+"two independent paths that must stay documented consistently" to "one
+path, one set of inputs." Not attempted here because it is a structural
+redesign, not a closeout-batch fix, and the two paths have not been
+shown to produce any actual inconsistency that would force the issue
+now.
+
+This suggestion is **not deleted and not marked resolved** — it remains
+an open, flagged item for the next batch of work on this kit.
+
 ## Final, current pass/not-pass summary (this revision — supersedes the table above)
 
 ```text
@@ -525,12 +666,15 @@ PASS  Review budget wiring, N1-N11 cleanup from that re-review             -- se
                                                                               third independent-agent pass -- disclosed as a narrower
                                                                               standard than the F1-F5/F7 verification, since none of
                                                                               N1-N11 were Blocker/Major)
-NOT SEPARATELY EXECUTED  Attack chain worked example, design-routing cases -- same lighter evidentiary standard as classification's
-                                                                              domain rows; not explicitly requested for re-execution
-                                                                              at any point in this session; disclosed, not silently
-                                                                              upgraded to PASS
-OPEN, NOT A DEFECT  Consolidating review-budget's two parallel computation -- explicitly flagged by the second independent review as
-                     entry points into one                                    needing human judgment; not implemented, not blocking
+PASS  Attack chain (positive + negative case)                             -- actually traced against live play text and fixtures,
+                                                                              not inferred from unchanged-file reasoning (see
+                                                                              "Updated disposition" -> "Attack chain")
+PASS  Design routing (all 7 cases)                                        -- actually traced against live activation list, play
+                                                                              text and cited fixtures (see "Updated disposition" ->
+                                                                              "Design routing")
+OPEN, NOT A DEFECT  Consolidating review-budget's two parallel computation -- formally disposed of, see "Architectural suggestion
+                     entry points into one                                    disposition" above: still open, not merged this batch,
+                                                                                deferred to V4, not blocking
 ```
 
 ## Final recommendation
@@ -544,21 +688,29 @@ genuinely failed on first pass — the review-budget wiring — went through
 a real fix-review-fix-verify cycle: independent review found a Blocker
 and 2 Majors, they were fixed and independently re-reviewed (CLOSED, no
 Blocker/Major), the re-review's own 6 new Minor findings were fixed and
-self-verified. Nothing in this final state is being claimed as passing
-without having actually been checked at the evidentiary standard
-disclosed next to it.
+self-verified. The two remaining un-executed test suites (attack chain,
+design routing) were then actually traced against live text in this
+closeout batch — 2/2 and 7/7 PASS, no FAIL found, so no fix/regression/
+re-review cycle was needed for them. Nothing in this final state is
+being claimed as passing without having actually been checked at the
+evidentiary standard disclosed next to it.
 
 **Conditions carried forward, not blocking, but part of the honest
 record**:
 
-- Net line count across all of V3 Slim: **+424 kit-wide**, not a
-  reduction. The one realized, safe reduction is -10 lines on one fixed
-  case (file download, 519 -> 509).
-- The review-budget wiring's last increment (N1-N11) was self-verified,
-  not independently re-reviewed a third time — a disclosed, narrower
-  standard than the rest of this remediation received, consistent with
+- Net line count across all of V3 Slim: **+424 kit-wide**, re-confirmed
+  fresh in this closeout batch — not a reduction. The one realized, safe
+  reduction is -10 lines on one fixed case (file download, 519 -> 509).
+- The review-budget wiring's N1-N11 increment was self-verified, not
+  independently re-reviewed a third time — a disclosed, narrower
+  standard than the rest of that remediation received, consistent with
   the instruction's own Blocker/Major re-review trigger.
-- The two-parallel-entry-point architectural question is open, flagged,
-  and deliberately not decided in this session.
-- No second Slim-reduction search was conducted in this final pass, per
-  instruction.
+- The two-parallel-entry-point architectural question has been formally
+  disposed of in this closeout batch (see "Architectural suggestion
+  disposition" above): still open, not merged, deferred to V4, not
+  blocking.
+- No second Slim-reduction search was conducted in this closeout batch,
+  and no security rule was changed, per instruction.
+- This revision's own HEAD, after being committed, is the commit a
+  `v3-slim-golden-baseline` git tag points to — see the commit/tag
+  reported alongside this file's delivery.
