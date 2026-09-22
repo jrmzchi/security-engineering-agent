@@ -39,12 +39,15 @@ Final findings
    `skills/security-change-detection`'s classification rather than
    picked directly, see `plays/secure-development-workflow.md`), and
    whether this is a diff-aware review (`git diff`) or a
-   full-repository review. For a TARGETED review, also record the
-   review budget level (`plays/review-budget.md`) that workflow step
-   already computed — it controls how much material step 5 below
-   actually loads within the domains this step selects, never which
-   domains are selected (see that play's "Context budget" section for
-   the depth rules this skill does not restate).
+   full-repository review. Also determine the review budget level
+   (`plays/review-budget.md`) here — for a TARGETED review, record the
+   level that workflow step already computed; for an explicitly
+   requested QUICK/STANDARD/DEEP review (which never passes through
+   that workflow step at all), compute it directly per that play's
+   "Explicit mode" section. Either way, the level controls how much
+   material step 5 below actually loads within the domains this step
+   selects, never which domains are selected (see that play's "Context
+   budget" section for the depth rules this skill does not restate).
 2. **Architecture discovery.** Identify languages/frameworks in play, entry
    points, trust boundaries, and which technology references apply
    (see "Progressive disclosure" below). If `.security/baseline.json`
@@ -57,6 +60,12 @@ Final findings
    `.security/attack-surface.json` (`plays/attack-surface-mapping.md`)
    already exists and is fresh, consult it for known entry
    points/controls/sinks — same freshness caveat as step 2's baseline.
+   At an `ELEVATED` review budget (step 1), also pull in
+   directly-connected map neighbors of the changed node(s) here — this
+   is the step that actually reads map data, see
+   `plays/review-budget.md`'s "Context budget" for the ELEVATED
+   definition and how to handle a neighbor that falls outside the
+   domain(s) step 1 already selected.
 4. **Automated scanners.** Run applicable scanners (Semgrep, Gitleaks,
    OSV-Scanner, Trivy, ecosystem-native tools) per `scripts/*/scan.*`.
    Treat every scanner hit as a **candidate**, never a confirmed finding.

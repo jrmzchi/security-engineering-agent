@@ -150,6 +150,14 @@ the baseline
 
 ### Default starting point, before weighing other factors
 
+This is a lookup definition, exercised only when a live review actually
+reaches this play — see "Applicability matrix" under "Output" below for
+exactly which sensitivity/mode combinations that is. A `NONE`- or
+`LOW`-classified change typically has no live review to apply the NONE/LOW
+row to at all; the rows exist for completeness and for the rare case
+where a lightweight `LOW` check escalates mid-review, not because every
+sensitivity value is computed and applied on every change.
+
 ```text
 NONE sensitivity      -> MINIMAL
 LOW sensitivity        -> MINIMAL or FOCUSED
@@ -210,15 +218,25 @@ MODERATE sensitivity (default: FOCUSED)
 **Budget refines effort allocation — it never reduces a mandatory
 requirement.** `plays/finding-validation.md`'s independent validation
 for every HIGH/CRITICAL candidate, `plays/security-gate.md`'s
-BLOCK-level outcomes, and `plays/security-change-detection.md`'s
-HIGH-sensitivity required workflow all apply in full regardless of what
-level this play assigns. A `MINIMAL`-budget change that unexpectedly
-turns up a HIGH/CRITICAL *candidate* still requires full independent
-validation before it can be called `CONFIRMED` (skipping straight to
-`CONFIRMED` without that step is exactly the shortcut
-`plays/finding-validation.md` exists to prevent), and still gates the
-same way once validated — budget affects how much is spent looking,
-not what happens if something serious is found anyway.
+BLOCK-level outcomes, `plays/security-change-detection.md`'s
+HIGH-sensitivity required workflow, and an explicitly requested `DEEP`
+review mode's own mandatory *activity* checklist (`plays/code-review.md`'s
+architecture analysis, threat model, full scanner run, manual review of
+every security-sensitive area, independent validation of every
+HIGH/CRITICAL candidate, configuration review, dependency review, and
+complete security report) all apply in full regardless of what level
+this play assigns. A `MINIMAL`-budget change that unexpectedly turns up
+a HIGH/CRITICAL *candidate* still requires full independent validation
+before it can be called `CONFIRMED` (skipping straight to `CONFIRMED`
+without that step is exactly the shortcut `plays/finding-validation.md`
+exists to prevent), and still gates the same way once validated. A
+`MINIMAL`-budget change reviewed under an explicitly requested `DEEP`
+mode still performs every one of that mode's activities — budget affects
+how much material is loaded and how much scrutiny is applied *within*
+those activities, not whether an activity happens at all. Budget affects
+how much is spent looking, not what happens if something serious is
+found anyway, and never removes an activity a mode already committed to
+performing.
 
 ## Context budget
 
@@ -226,10 +244,11 @@ not what happens if something serious is found anyway.
 decides how much material to load *within* that scope — it never
 expands the domain set mode already fixed.** For a `TARGETED`-mode
 review, that set is whatever `skills/security-change-detection`
-identified; for QUICK/STANDARD, whatever `plays/code-review.md`'s
-domain-to-play table calls for at that mode; for DEEP mode, everything
-DEEP mode already requires. This play's levels only control *depth*
-within that fixed set:
+identified; for QUICK/STANDARD, whatever `skills/security-review/SKILL.md`'s
+"Where to look next" table calls for at that mode (the same table
+`plays/code-review.md` itself points to for this — see that play's
+`TARGETED` note); for DEEP mode, everything DEEP mode already requires.
+This play's levels only control *depth* within that fixed set:
 
 ```text
 MINIMAL/FOCUSED   the play(s) for the identified domain(s), reference
@@ -239,9 +258,19 @@ MINIMAL/FOCUSED   the play(s) for the identified domain(s), reference
 
 ELEVATED          the identified domain(s)' full depth of reference
                   material, plus directly-connected attack-surface map
-                  neighbors of the changed node (still within the
-                  domains mode already selected — this adds depth and
-                  immediately-adjacent context, not new domains)
+                  neighbors of the changed node — consumed at
+                  skills/security-review/SKILL.md's "Attack surface
+                  identification" step, where map data is actually read.
+                  When a neighbor falls inside the domains mode already
+                  selected, this adds depth and immediately-adjacent
+                  context, not new domains. When a neighbor falls
+                  *outside* those domains, do not silently load it
+                  (budget never expands the domain set) and do not
+                  silently drop it either (it is still a real structural
+                  signal) — flag it for the domain-selection step to
+                  evaluate, the same way `plays/security-impact-analysis.md`'s
+                  `POTENTIAL` classification surfaces something for
+                  confirmation rather than deciding it either way
 
 AUDIT             whatever DEEP review mode already requires loading;
                   this level doesn't add anything mode wasn't already
@@ -251,19 +280,100 @@ AUDIT             whatever DEEP review mode already requires loading;
 A `MINIMAL`-budget change under `DEEP` review mode (an explicit
 release audit that happens to touch nothing security-sensitive) still
 gets everything DEEP mode requires — budget never overrides what mode
-already committed to loading, in either direction.
+already committed to loading, in either direction. See "The floor this
+play cannot lower" above for the equivalent guarantee over DEEP's
+*activities*, not just what gets loaded — the two are different claims
+and both hold.
+
+## Applicability matrix: which sensitivity/mode combinations actually compute and apply a budget
+
+Sensitivity (`NONE`/`LOW`/`MODERATE`/`HIGH`) is only ever produced by
+`skills/security-change-detection`, invoked exclusively from
+`plays/secure-development-workflow.md`'s proactive workflow. An
+explicitly requested `QUICK`/`STANDARD`/`DEEP` review
+(`plays/code-review.md`'s "Review modes") never goes through that
+workflow or that classifier — see that workflow's own "This does not
+replace explicit workflows" section and `plays/code-review.md`'s
+`TARGETED` note ("Not something a user picks explicitly... it's the
+mode the proactive workflow uses on its own"). Sensitivity and an
+explicitly-requested mode therefore never actually combine in this
+kit's mechanism; the table below reflects that rather than forcing 16
+independently-computed cells, and does not restate the actual
+MINIMAL/FOCUSED/ELEVATED/AUDIT values already defined in "Default
+starting point" above — only where (or whether) that lookup is ever
+reached.
+
+```text
+          QUICK/STANDARD/DEEP (explicit)     TARGETED (proactive workflow)
+NONE      N/A — sensitivity not computed     No live review exists to scope:
+          for an explicit request; see       security-change-detection's NONE
+          "Explicit mode" below              action is "no security workflow...
+                                              do not run a scanner, do not load
+                                              a play." The NONE row above is a
+                                              lookup definition, never applied.
+LOW       N/A, same reason                   Only a lightweight diff check
+                                              runs, not a formal targeted
+                                              review — no live review to scope
+                                              unless the check surfaces
+                                              something that re-classifies the
+                                              change higher first.
+MODERATE  N/A, same reason                   REACHABLE — computed at
+                                              plays/secure-development-
+                                              workflow.md's "Determine review
+                                              budget" step, applied at
+                                              skills/security-review/SKILL.md's
+                                              Scope and Manual semantic
+                                              analysis steps. Value: "Default
+                                              starting point" above.
+HIGH      N/A, same reason                   REACHABLE, same entry point.
+                                              Value: "Default starting point"
+                                              above. Mandatory security-design
+                                              (pre-code HIGH) is a separate,
+                                              budget-independent gate — see
+                                              "The floor this play cannot
+                                              lower".
+```
+
+### Explicit mode: computed directly at the Scope step, not via the workflow
+
+`QUICK`/`STANDARD`/`DEEP` never reach `plays/secure-development-workflow.md`'s
+"Determine review budget" step — that step only exists on the proactive
+workflow's path. `skills/security-review/SKILL.md`'s own "Scope" step is
+the one entry point these three modes do reach, and computes a budget
+directly there, without a sensitivity input:
+
+```text
+QUICK (explicit)      -> FOCUSED — no sensitivity signal exists to
+                          escalate or de-escalate from; see "Levels"
+                          above for why FOCUSED is the right default
+                          absent one
+STANDARD (explicit)    -> FOCUSED, same reasoning
+DEEP (explicit)         -> AUDIT — see "Context budget" above for why
+                          this is a no-op safety cap, not a new
+                          restriction, and "Renamed from the naming..."
+                          above for AUDIT already being defined to cover
+                          exactly this case
+```
+
+The Factors above can still adjust this starting point if information
+relevant to them is available (e.g. a known baseline confidence fact) —
+absent that, FOCUSED/AUDIT are the defaults for these three modes
+specifically, not derived from a sensitivity label that was never
+computed for them.
 
 ## Output
 
 This play doesn't introduce its own artifact or finding format — its
 output is a level (`MINIMAL`/`FOCUSED`/`ELEVATED`/`AUDIT`) that informs
 how much of `skills/security-review`'s workflow to actually spend, and
-how much reference material to load while doing it. `AGENTS.md`'s
-"Before implementing a meaningful software change" step 1 names this
-play as one of the inputs that refines sensitivity classification;
-`plays/secure-development-workflow.md`'s workflow diagram is where this
-level is actually computed (the "Determine review budget" step, between
-scanner selection and targeted review), and `skills/security-review/SKILL.md`'s
-"Scope" and "Manual semantic analysis" steps are where it is applied —
-see `tests/validation/v3-review-budget-test-cases.md`'s end-to-end case
-for a worked trace through all three.
+how much reference material to load while doing it — see "Applicability
+matrix" above for exactly which sensitivity/mode combinations reach a
+live computation, and where. `AGENTS.md`'s "Before implementing a
+meaningful software change" step 6 (proportional targeted review) names
+this play as the thing computed from step 5's (re-)classification, not
+as an input that itself refines that classification — project
+baseline/attack-surface map (also named in that routing summary, at
+step 1) are the actual classification-refining inputs; this play is
+downstream of classification, not alongside it. See
+`tests/validation/v3-review-budget-test-cases.md` for worked traces
+through every reachable cell above.
