@@ -6,7 +6,9 @@ description: Actively try to defeat a claimed protection or remediation using a 
 # Adversarial Validation
 
 A systematic bypass-hunting checklist, applied for a bounded set of
-high-risk cases — not a separate pass with its own result states. Full
+high-risk cases — not a separate pass with its own outcome states,
+though its own conclusion is recorded as a structured evidence tag
+that never decides the outcome by itself (see "Results" below). Full
 procedure in `plays/adversarial-validation.md`, which extends
 `plays/security-remediation.md`'s existing mandatory re-validation
 question ("can the protection be bypassed a different way?") with a
@@ -39,7 +41,7 @@ separate pass at all — it's a systematic technique list for answering
 a question `plays/security-remediation.md`'s mandatory re-validation
 already asks.
 
-## Results: no new vocabulary
+## Results: existing outcome vocabulary, plus a structured evidence tag
 
 A demonstrated bypass on a claimed protection moves a `REJECTED`
 finding back to `CONFIRMED` (never leave it `REJECTED` once a concrete
@@ -48,9 +50,21 @@ that was already `CONFIRMED`; an unresolved lead is
 `NEEDS_VERIFICATION`; nothing found leaves the existing status as
 supporting evidence, not a new conclusion. For a remediation, results
 feed `plays/security-remediation.md`'s existing `RESOLVED`/
-`STILL_VULNERABLE`/`FIX_UNVERIFIED` outcomes directly. See the play's
-"Results use existing vocabulary, not a new one" section — there is no
-`BYPASS_FOUND`/`CONTROL_HOLDS`-style parallel state machine here.
+`STILL_VULNERABLE`/`FIX_UNVERIFIED` outcomes directly — see the play's
+"Results use existing vocabulary, not a new one" section. The
+checklist's own conclusion is additionally recorded as a structured
+tag alongside that outcome — `CONTROL_HOLDS`/`BYPASS_FOUND`/
+`CONTROL_INCONCLUSIVE`/`NOT_APPLICABLE` for a finding,
+`FIX_HOLDS`/`FIX_BYPASSED`/`FIX_INCONCLUSIVE`/`NOT_APPLICABLE` for a
+remediation, or `CONTROL_HOLDS`/`BYPASS_FOUND`/`CONTROL_INCONCLUSIVE`
+(no `NOT_APPLICABLE`) independently defined for a chain — every value
+is non-deterministic evidence, never a decision by itself, and never
+instead of the outcome above.
+See the play's "Structured result metadata" section, including "Why
+this is safe" for how this differs from the parallel state machine an
+earlier draft was rejected for (and from this same batch's own first
+attempt, which reintroduced that exact problem before review caught
+it).
 
 ## Sequential fallback
 
@@ -70,7 +84,7 @@ require live testing, say so and stop.
 
 ## Output
 
-No new artifact and no new status vocabulary — see
-`plays/adversarial-validation.md`'s "Recorded via existing narrative,
-not a dedicated field" for where results are captured, what invokes
-this play today, and what's still open.
+No new artifact, and the outcome still uses this kit's existing
+finding/remediation vocabulary — see
+`plays/adversarial-validation.md`'s "Where this is recorded" for the
+dedicated structured-result field and what invokes this play today.

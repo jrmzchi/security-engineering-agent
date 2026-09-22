@@ -72,6 +72,11 @@ Confidence              HIGH / MEDIUM / LOW, or NEEDS_VERIFICATION —
                       see "Confidence" below
 Chain severity          see "Chain severity" below — not simply the
                       highest severity among the component findings
+Adversarial Validation  once `plays/adversarial-validation.md`'s
+                      checklist has been considered for this chain
+                      (mandatory by default, per that play's trigger
+                      list) — see `templates/attack-chain.md`'s field
+                      and that play's "Structured result metadata"
 ```
 
 ## Confidence: reuses `finding-validation.md`'s scale, not a new one
@@ -212,7 +217,13 @@ validation, not more of the same" section for why confirming plausibly
 and hunting for a bypass are different objectives assigned to
 different places). This play establishes the chain record that
 checklist would be applied to; it does not itself perform that
-checklist.
+checklist. Record the result in the chain record's `Adversarial
+Validation` field (see "Required fields" above and
+`templates/attack-chain.md`) — see
+`plays/adversarial-validation.md`'s "Structured result metadata" for
+the chain-specific values, including how `CONTROL_INCONCLUSIVE`
+feeds this play's own Confidence field above rather than a separate
+status.
 
 ## Relationship to the Security Gate
 

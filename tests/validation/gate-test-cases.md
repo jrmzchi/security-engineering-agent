@@ -31,6 +31,8 @@ in gate logic, not a difference of security opinion.
 | 20 | A chain record, MEDIUM severity, HIGH confidence | PASS_WITH_WARNINGS |
 | 21 | A chain record, CRITICAL severity + one unrelated CONFIRMED LOW finding, same batch | BLOCK (precedence across findings and chain records together — see `plays/security-gate.md`'s "Outcomes") |
 | 22 | A chain record, INFORMATIONAL severity | PASS |
+| 23 | One MEDIUM candidate, validated, result NEEDS_VERIFICATION | PASS_WITH_WARNINGS (unlike case 4 — the BLOCK escalation for an unresolved candidate applies only at HIGH/CRITICAL; see `plays/security-gate.md`'s Default policy table) |
+| 24 | One MEDIUM candidate, not yet validated | PASS (unlike case 3 — an unvalidated MEDIUM/LOW candidate doesn't itself warrant AWAITING_VALIDATION or a note) |
 
 Cases 1–9 exercise the default policy table directly. Case 10 exercises
 risk-acceptance handling; cases 11–13 exercise precedence/aggregation
@@ -39,7 +41,10 @@ Cases 18–22 exercise the chain-record rows added alongside the
 per-finding policy table — a chain record is not itself a finding and
 has no CONFIRMED/REJECTED status, only a Confidence and a Chain
 severity, so the lookup keys differ from cases 1–17 even though the
-outcome vocabulary is the same.
+outcome vocabulary is the same. Cases 23–24 exercise the MEDIUM/LOW
+candidate rows — do not conflate them with cases 3–4; only HIGH/
+CRITICAL gets the AWAITING_VALIDATION/BLOCK treatment for an
+unresolved candidate.
 If a reviewer gets case 4, 16, or 19 wrong
 (treating an unresolved HIGH/CRITICAL, or an unresolved chain, as
 safe), that is the specific failure mode `plays/security-gate.md`'s

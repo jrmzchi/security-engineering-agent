@@ -43,31 +43,52 @@ the original payload.
 | `cookie_insecure_unsafe.js` | CONFIRMED, MEDIUM/HIGH | Insecure cookie / CWE-614, CWE-1004 | — |
 | `cookie_secure_safe.js` | No confirmed finding | — | reviewer flags any `res.cookie` call, missing that `httpOnly`/`secure`/`sameSite` are all set |
 | `remediation_fake_fix_before.py` | CONFIRMED, HIGH/CRITICAL | SQL injection / CWE-89 | — |
-| `remediation_fake_fix_after_still_vulnerable.py` | Re-validation result: `STILL_VULNERABLE` (not `RESOLVED`) | SQL injection / CWE-89, unresolved | reviewer re-tests only the original literal payload (`' OR '1'='1`), sees it blocked, and incorrectly reports `RESOLVED` — see `plays/security-remediation.md`'s "Fake fix" section |
+| `remediation_fake_fix_after_still_vulnerable.py` | Re-validation result: `STILL_VULNERABLE` (not `RESOLVED`); adversarialValidation: `FIX_BYPASSED` if `plays/adversarial-validation.md`'s checklist is applied | SQL injection / CWE-89, unresolved | reviewer re-tests only the original literal payload (`' OR '1'='1`), sees it blocked, and incorrectly reports `RESOLVED` — see `plays/security-remediation.md`'s "Fake fix" section |
+| `cross_file_sql_unsafe/` (all 3 files — see "Validation forms" in `README.md`) | CONFIRMED, CRITICAL/HIGH | SQL injection / CWE-89 | reviewer confirms from `UserRepository.cs`'s sink alone, without tracing that `query` is attacker-controlled all the way from `UsersController.cs` |
+| `cross_file_sql_safe/` (all 3 files) | No confirmed finding | — | reviewer flags this just because raw ADO.NET is used and input crosses 3 files, missing that `UserRepository.cs` binds `query` as a SQL parameter |
+| `cross_file_path_traversal_unsafe/` (all 3 files) | CONFIRMED, HIGH/CRITICAL | Path traversal / CWE-22 | reviewer confirms from `PathHelper.cs`'s missing check alone, without tracing that `reportName` is attacker-controlled all the way from `DownloadController.cs` |
+| `cross_file_path_traversal_safe/` (all 3 files) | No confirmed finding | — | reviewer flags any `Path.Combine` with a query parameter reachable across 3 files, missing that `PathHelper.cs` canonicalizes and checks containment before use |
+| `cross_file_object_authz_unsafe/` (all 3 files) | CONFIRMED, HIGH | IDOR / BOLA / CWE-639 | reviewer sees `[Authorize]` on the controller and stops, missing that no file in the chain checks object ownership |
+| `cross_file_object_authz_safe/` (all 3 files) | No confirmed finding | — | reviewer flags this just because `reportId` is sequential, missing that `ReportService.cs` enforces an explicit ownership check |
+| `path_prefix_before_canonicalization_deceptive.cs` | CONFIRMED, HIGH/CRITICAL | Path traversal / CWE-22 | `StartsWith` containment check present in the code, evaluated on the *uncanonicalized* combined path — passes a payload that still escapes once resolved |
+| `path_prefix_after_canonicalization_safe.cs` | No confirmed finding | — | adversarial checklist (technique 6) manufactures a bypass here despite the control being structurally similar to the deceptive fixture above — expected adversarialValidation result if applied: `CONTROL_HOLDS`, not `BYPASS_FOUND` |
 
 See also `tests/validation/classification-test-cases.md`,
-`tests/validation/gate-test-cases.md`, and
-`tests/validation/design-routing-test-cases.md` for the change-detection,
-gate-policy, and security-design-routing test cases — those validate
-different capabilities than the CONFIRMED/not-CONFIRMED table above and
-are not duplicated here.
+`tests/validation/gate-test-cases.md`,
+`tests/validation/design-routing-test-cases.md`,
+`tests/validation/v3-cross-file-test-cases.md`,
+`tests/validation/v3-attack-chain-test-cases.md`,
+`tests/validation/v3-adversarial-test-cases.md`,
+`tests/validation/v3-freshness-test-cases.md`, and
+`tests/validation/v3-review-budget-test-cases.md` for the
+change-detection, gate-policy, security-design-routing, and V3
+project-security-intelligence test cases — those validate different
+capabilities than the CONFIRMED/not-CONFIRMED table above and are not
+duplicated here.
 
 ## Summary counts (for a quick pass/fail read)
 
 ```text
-Must produce a CONFIRMED finding:      16  (7 *_unsafe fixtures from
+Must produce a CONFIRMED finding:      20  (7 *_unsafe fixtures from
                                              tests/fixtures/'s original
                                              batch + 2 *_deceptive.cs +
                                              1 unsafe method inside
                                              ef_fromsqlraw_vs_interpolated.cs
                                              + 5 *_unsafe.* fixtures
-                                             added in this batch
-                                             + remediation_fake_fix_before.py)
-Must NOT produce a CONFIRMED finding:  14  (7 *_safe/*_example fixtures +
+                                             added in a later batch
+                                             + remediation_fake_fix_before.py
+                                             + 3 cross-file *_unsafe/
+                                             groups + 1
+                                             path_prefix_before_
+                                             canonicalization_deceptive.cs)
+Must NOT produce a CONFIRMED finding:  18  (7 *_safe/*_example fixtures +
                                              2 safe methods inside
                                              ef_fromsqlraw_vs_interpolated.cs
                                              + 5 *_safe fixtures added in
-                                             this batch)
+                                             a later batch + 3 cross-file
+                                             *_safe/ groups + 1
+                                             path_prefix_after_
+                                             canonicalization_safe.cs)
 Must resolve to STILL_VULNERABLE on
 re-validation (not a CONFIRMED/not-
 CONFIRMED case):                        1  (remediation_fake_fix_after_still_vulnerable.py)

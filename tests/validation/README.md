@@ -94,6 +94,25 @@ Text-case lookup tables (classification-test-cases.md,
      either the table or the play needs correcting — same principle as
      "Where the result does not match" above, just applied to a
      document instead of a code fixture.
+
+Multi-file fixture group (a directory under tests/fixtures/ holding
+                           several files that only demonstrate the
+                           vulnerability/safety claim together, e.g.
+                           cross_file_sql_unsafe/'s Controller +
+                           Service + Repository)
+  -> Hand the reviewer being validated ALL files in the directory at
+     once, as they would encounter a real multi-file codebase — never
+     one file from the group in isolation (a single file like
+     cross_file_sql_unsafe/UsersController.cs shows no vulnerability
+     at all on its own; per plays/cross-file-data-flow.md, the point is
+     exactly that the reviewer must trace across the file boundary).
+     Pass = CONFIRMED (for an `_unsafe` group) or no confirmed finding
+     (for a `_safe` group) on the full group, citing the actual
+     cross-file path. Getting the *right* answer by examining only one
+     file in the group (e.g. flagging the Repository's SQL sink
+     without tracing that `query` is attacker-controlled) is not a
+     pass — see plays/finding-validation.md's attack-path requirement,
+     which this form exists to validate wasn't skipped.
 ```
 
 ## Running a fixture "blind"
@@ -123,8 +142,10 @@ answer in advance has not actually validated anything).
 New fixture pairs are welcome as this kit's coverage grows — follow the
 existing naming convention (`<category>_unsafe.<ext>` /
 `<category>_safe.<ext>`, `<category>_deceptive.<ext>` for a
-false-negative-avoidance case, or `<category>_before.<ext>` /
-`<category>_after_<outcome>.<ext>` for a remediation pair), add the
+false-negative-avoidance case, `<category>_before.<ext>` /
+`<category>_after_<outcome>.<ext>` for a remediation pair, or
+`<category>_unsafe`/`<category>_safe` as a directory holding several
+files for a cross-file case — see "Validation forms" above), add the
 comment block describing the expected outcome and why, and add a row
 to `expected-results.md`. If the new fixture doesn't fit the static
 single-file validation form, add its procedure to "Validation forms"

@@ -3,11 +3,14 @@
 Authoritative procedure for `skills/adversarial-validation`. Actively
 tries to **defeat** a claimed protection or remediation, for a
 specific, bounded set of high-risk cases — not a separate pass with
-its own result vocabulary, but a technique checklist whose findings
+its own outcome vocabulary, but a technique checklist whose findings
 get recorded using this kit's *existing* finding/remediation
 vocabulary (see "Results use existing vocabulary, not a new one"
-below). Extends `plays/security-remediation.md`'s existing
-re-validation questions (which already ask some of this, narrowly) and
+below), plus a structured evidence tag for the checklist's own
+conclusion that never decides that outcome by itself (see "Structured
+result metadata" below). Extends `plays/security-remediation.md`'s
+existing re-validation questions (which already ask some of this,
+narrowly) and
 `plays/finding-validation.md`'s existing validation procedure into a
 more systematic bypass-hunting pass for the specific cases where that
 extra rigor is worth its cost.
@@ -63,7 +66,10 @@ Confirmed HIGH finding with more than one control in its path, or
     execution order rather than a simple check
 Any HIGH/CRITICAL remediation (applying this checklist to
     plays/security-remediation.md's existing mandatory re-validation
-    question, per "A different objective" above)
+    question, per "A different objective" above) EXCEPT an
+    exposure-type remediation (see "Findings this checklist genuinely
+    doesn't apply to" below and "Structured result metadata"'s
+    remediation-side NOT_APPLICABLE)
 Authentication bypass claims
 Authorization bypass claims
 SSRF with an allowlist/proxy protection
@@ -132,10 +138,13 @@ For the claimed protection or fix in question:
 
 ## Results use existing vocabulary, not a new one
 
-This play doesn't add `CONTROL_HOLDS`/`BYPASS_FOUND`-style states on
-top of what already exists — a bypass or its absence is recorded using
-the finding/remediation vocabulary that already applies to whatever
-was being checked:
+This checklist's **outcome** — what happens to the finding's or
+remediation's status — never gets a parallel state machine on top of
+what already exists; a bypass or its absence still resolves to the
+finding/remediation vocabulary that already applies to whatever was
+being checked (see "Structured result metadata" below for how the
+checklist's *own* conclusion is additionally recorded as an evidence
+tag alongside that outcome, not instead of it):
 
 **For a claimed protection on an original finding:**
 
@@ -183,6 +192,217 @@ exception) has no claimed protection or fix to attack in the first
 place. Route these back to ordinary validation rather than running this
 checklist against nothing.
 
+## Structured result metadata (an evidence tag, never a decision)
+
+Record the checklist's own conclusion as a structured field alongside
+the outcome above — **every value here is supporting evidence for
+whichever section actually decides the outcome (this play's "Results
+use existing vocabulary" above, `plays/security-remediation.md`'s
+Result block, or `plays/attack-chain-analysis.md`'s "When a chain is
+real"/"Confidence" sections for a chain); no value in this field ever
+decides the outcome by itself.** That constraint is absolute, not a
+default: a value that would need to force a status change belongs in
+one of those sections, not here.
+
+Each of the three carriers below gets its own complete definition of
+what each value supports *in that carrier's terms* — deliberately not
+"define once, reuse by analogy" for the other two, since that pattern
+is exactly how earlier issues in this section went unnoticed: a value
+re-scoped for one carrier but left with another carrier's wording
+still attached.
+
+**For a claimed protection on an original finding:**
+
+```text
+CONTROL_HOLDS         the control was actively challenged (realistic
+                       bypass paths considered per "The techniques"
+                       above) and no viable bypass was found on
+                       *this* control specifically. Supports, but does
+                       not by itself decide, the finding's status —
+                       a CONFIRMED finding can carry a CONTROL_HOLDS
+                       tag on a secondary/partial control that never
+                       fully mitigated it in the first place
+BYPASS_FOUND           a concrete, evidenced bypass of *this* control
+                       exists. Supports "Results use existing
+                       vocabulary" above's CONFIRMED rule — applied to
+                       whichever finding this control's failure
+                       actually affects, which the Validator
+                       determines; this tag records the evidence, not
+                       the resulting status
+CONTROL_INCONCLUSIVE   evidence is insufficient, environment/framework
+                       behavior can't be established, or the
+                       checklist couldn't be run as a genuinely
+                       independent pass. Supports NEEDS_VERIFICATION
+                       per "Results use existing vocabulary" above,
+                       applied by the Validator
+NOT_APPLICABLE         considered and determined not to apply — an
+                       exposure-type finding with no claimed
+                       protection to attack (see "Findings this
+                       checklist genuinely doesn't apply to" above),
+                       or a finding a reviewer determined was outside
+                       the trigger list — not simply omitted without
+                       that consideration
+```
+
+**For a remediation:**
+
+```text
+FIX_HOLDS         no bypass found across the techniques actually
+                   tried — supports, but by itself does not
+                   guarantee, RESOLVED (ordinary re-validation's own
+                   check against the original reproduction still has
+                   to pass too, and a regression check per
+                   plays/security-remediation.md's "Checking for
+                   newly introduced issues" still applies)
+FIX_BYPASSED       a concrete bypass of the fix exists. Supports
+                   STILL_VULNERABLE (or REGRESSION_INTRODUCED if the
+                   fix also broke legitimate functionality) per
+                   plays/security-remediation.md's Result block —
+                   the Result there states the outcome, this tag only
+                   supports it
+FIX_INCONCLUSIVE   re-validation could not establish one of the
+                   above — supports FIX_UNVERIFIED, applied by the
+                   re-validation pass
+NOT_APPLICABLE     considered and determined not to apply — the
+                   underlying finding is exposure-type with no fix
+                   behavior to attack (mirrors the finding-side
+                   carve-out above: leaked credentials, reachable
+                   known-CVE dependencies). Every other HIGH/CRITICAL
+                   remediation is on the trigger list by default (see
+                   "When this checklist is worth the effort" above)
+                   and should use one of the other three values, not
+                   this one
+```
+
+**For an attack chain** (`plays/attack-chain-analysis.md`), applying
+the checklist to the preconditions/controls *between* steps per this
+play's own trigger-list entry above — this reuses three of the same
+names for a different object, disclosed as safe the same way
+`plays/finding-validation.md`'s notes on `NEEDS_VERIFICATION`'s reuse
+disclose it elsewhere: a chain record and a finding are never the same
+object needing two meanings at once. Each value is independently
+defined here, not inherited from the finding-side table above.
+`NOT_APPLICABLE` is deliberately **not** part of this set: a
+multi-finding chain is always on the trigger list by default (per this
+play's own trigger list above), so there is no case where the
+checklist doesn't apply to a chain that exists at all — every
+transition gets one of the other three values, never this one:
+
+```text
+CONTROL_HOLDS          the precondition/control between two
+                       consecutive steps was actively challenged and
+                       no way was found to reach the later step while
+                       skipping the earlier one. Supports that
+                       transition continuing to satisfy
+                       plays/attack-chain-analysis.md's "When a chain
+                       is real" test — does not by itself confirm the
+                       chain overall if other transitions still need
+                       checking
+BYPASS_FOUND           a way to reach the later step while skipping
+                       the earlier one was found — the precondition
+                       does not actually hold as claimed. Supports
+                       re-examining that link against
+                       plays/attack-chain-analysis.md's "When a chain
+                       is real" core requirement (if the later step is
+                       reachable without the earlier one, the earlier
+                       step is not a required link); the chain record
+                       needs revising — removing that step, or
+                       documenting the shorter path as its own finding
+                       — not just noting the bypass
+CONTROL_INCONCLUSIVE   evidence is insufficient to confirm whether a
+                       precondition holds. Supports
+                       `NEEDS_VERIFICATION` specifically as this
+                       chain's own Confidence value (see
+                       plays/attack-chain-analysis.md's "Confidence"
+                       section) — a second disclosed-safe reuse of
+                       that name for this object, distinct from this
+                       tag: the tag records *why* (a challenged
+                       precondition couldn't be resolved), the
+                       Confidence field records the resulting level
+```
+
+Record supporting evidence (which technique(s) were tried, what they
+found) alongside the value in every case above — a bare enum with no
+evidence is not more useful than the narrative form this extends.
+
+These values are spelled ALL_CAPS above, matching this kit's
+machine-readable-status convention (see
+`plays/finding-validation.md`'s note on that convention). Where a
+carrier's own template already writes its other fields in a different
+case (`templates/finding.md`'s `Status: Candidate | Confirmed | ...`
+is Title_Case, matching that template's own local convention, not this
+one), write these values in that carrier's local case instead — the
+identifier matters, not the letter case.
+
+### Why this is safe
+
+An earlier draft of this play tried a full parallel state machine
+(`CONTROL_HOLDS`/`BYPASS_FOUND` *as* the outcome, not alongside it) and
+was rejected by review for three reasons: (1) a branch that could
+never be reached (`BYPASS_FOUND` combined with an "or
+NEEDS_VERIFICATION" option that its own "concrete, evidenced"
+definition made impossible); (2) it silently reused the "can't
+establish" naming family a third time without disclosure; (3) it
+misstated how narrow `plays/security-remediation.md`'s existing
+re-validation question was.
+
+A later revision of *this* redesign was itself found, on review, to
+have reintroduced (1) and (2) in new forms twice more: first, three of
+the four values were defined as deterministic (forcing a status
+change) — a second outcome mechanism regardless of framing, whose
+scope mismatch (a tag about *one control* forcing a decision about
+*the whole finding*) produced exactly the kind of contradictory
+combination (1) describes; and the bare `INCONCLUSIVE` name, reused
+verbatim across the finding-side and remediation-side enums with two
+different target statuses, recreated (2). Second, after fixing those,
+the attack-chain carrier was added by re-scoping only one of the four
+values and leaving the other three with finding-oriented wording still
+attached — which left `CONTROL_INCONCLUSIVE` pointing at a
+`NEEDS_VERIFICATION` that, on a chain record, is a different field
+(Confidence) than the one it meant for a finding (status), undisclosed,
+and left `NOT_APPLICABLE` defined only in finding-shaped terms a chain
+could never satisfy.
+
+Rather than re-litigate each fix, use this checklist whenever this
+section is next touched — for a new value, a new carrier, or restoring
+any determinism:
+
+```text
+1. Does this value decide an outcome/status/Confidence field by
+   itself, for any carrier? If yes, it belongs in a status-defining
+   section (e.g. "Results use existing vocabulary" above), not here.
+2. Is every value defined independently and completely for the
+   carrier it's being added to — not "same as finding's, except X"?
+   A value inherited-by-reference is exactly how the chain carrier's
+   defect happened.
+3. Does this value's name already carry a specific, different meaning
+   elsewhere in this kit? If reused, is it disclosed as safe using the
+   same test `plays/finding-validation.md`'s notes on
+   `NEEDS_VERIFICATION`'s reuse already apply: would any single object
+   ever need this name to mean two different things at once?
+4. When adding a new carrier: does its own template gain the field,
+   does its owning play's "Required fields" (or equivalent) list it,
+   and does this play's "Where this is recorded" name it? All three,
+   not just the value definitions above — a carrier added without all
+   three is exactly how the chain carrier's first attempt fell short.
+```
+
+A "no" to (1), and a genuine "no" to (3) (or an explicit, checked
+disclosure), are what keep this field evidence rather than a decision;
+(4) is what keeps a new carrier actually reachable in practice.
+
+## Where this is recorded
+
+This play is invoked from `skills/security-review/SKILL.md`'s workflow
+(step 7), `AGENTS.md`'s routing summary (steps 7 and 9), and
+`plays/security-remediation.md`'s mandatory re-validation question —
+that wiring is done. `templates/finding.md`'s "Validation" section,
+`plays/security-remediation.md`'s re-validation result block, and
+`templates/attack-chain.md`'s chain record each have a dedicated
+`Adversarial Validation:` field for the structured result above, plus
+room for the supporting evidence — see those files for the exact
+field.
+
 ## Sequential fallback: no independent pass available
 
 When no separate subagent/context is available and a genuinely
@@ -194,7 +414,9 @@ exists to prevent for remediations (mark `FIX_UNVERIFIED` rather than
 claim `RESOLVED` on that basis). Apply the same default for an original
 finding's claimed protection: if this checklist couldn't actually be
 run as a separate pass, record `NEEDS_VERIFICATION` rather than letting
-the finding's or control's existing status stand unexamined.
+the finding's or control's existing status stand unexamined
+(`CONTROL_INCONCLUSIVE`/`FIX_INCONCLUSIVE` in the structured field
+above, which supports the same conclusion).
 
 ## Safety boundary
 
@@ -210,23 +432,12 @@ confirming a bypass (a race condition is the most likely case here —
 see technique 8) would require live testing against a real
 environment, say so and stop rather than asserting the bypass anyway.
 
-## Recorded via existing narrative, not a dedicated field
-
-This play is invoked from `skills/security-review/SKILL.md`'s workflow
-(step 7), `AGENTS.md`'s routing summary (steps 7 and 9), and
-`plays/security-remediation.md`'s mandatory re-validation question —
-that wiring is done. What remains open: `templates/finding.md`'s
-"Validation" section and `plays/security-remediation.md`'s
-re-validation reporting still have no dedicated structured field for
-recording that this checklist was applied (which techniques, and what
-was found) — record it as part of the existing Validation/
-re-validation narrative rather than omitting it, or adding one,
-until a later batch decides a dedicated field is worth it.
-
 ## Output
 
-No new artifact and no new status vocabulary of its own — see
-"Results use existing vocabulary, not a new one" above. A finding or
-remediation this checklist was applied to is still reported using
-`templates/finding.md`/`plays/security-remediation.md`'s existing
-format, same as always.
+No new artifact, and the outcome still uses this kit's existing
+finding/remediation vocabulary — see "Results use existing vocabulary,
+not a new one" above. The checklist's own conclusion is additionally
+recorded via the dedicated field described in "Where this is recorded"
+above; a finding or remediation this checklist was applied to is still
+reported using `templates/finding.md`/`plays/security-remediation.md`'s
+existing format otherwise, same as always.

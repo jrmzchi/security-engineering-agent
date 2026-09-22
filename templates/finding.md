@@ -73,10 +73,18 @@ this section may simply state that validation was not required per the
 project's process. If this finding went through `skills/security-gate`,
 note the outcome here too (PASS/BLOCK/AWAITING_VALIDATION/
 PASS_WITH_WARNINGS/PASS_WITH_ACCEPTED_RISK — see `plays/security-gate.md`).
-If this finding matched `plays/adversarial-validation.md`'s trigger
-list, note which techniques were actually tried and what they found —
-that play has no dedicated field of its own yet, so record it here as
-part of this narrative rather than omitting it.
+Once `plays/adversarial-validation.md`'s checklist has been considered
+for this finding (mandatory by default for the cases its trigger list
+names), record:
+
+Adversarial Validation: Control_Holds | Bypass_Found |
+    Control_Inconclusive | Not_Applicable
+    (see plays/adversarial-validation.md's "Structured result
+    metadata" for exact meanings — this is an evidence tag the
+    Validator weighs, never a replacement for Status above; use
+    Not_Applicable if the checklist was considered and determined not
+    to apply, not if it was simply skipped)
+Techniques tried: which technique(s) were tried and what they found
 
 ### Remediation
 

@@ -57,6 +57,23 @@ CRITICAL | HIGH | MEDIUM | LOW | INFORMATIONAL, with the reasoning —
 **not** simply the highest severity among the component findings; see
 `plays/attack-chain-analysis.md`'s "Chain severity" section for the
 factors to weigh against the combined path.
+
+### Adversarial Validation
+
+A multi-finding chain is on `plays/adversarial-validation.md`'s
+trigger list by default (once that trigger applies) — applied to the
+preconditions/controls *between* steps, not to the chain's
+already-established combined impact. Once considered, record:
+
+Adversarial Validation: CONTROL_HOLDS | BYPASS_FOUND |
+    CONTROL_INCONCLUSIVE
+    (see plays/adversarial-validation.md's "Structured result
+    metadata" for this chain-specific definition of each value — not
+    the finding-side one; an evidence tag this play's own "When a
+    chain is real" test and Confidence section weigh, never a
+    replacement for either)
+Techniques tried: which precondition(s)/step(s) were challenged and
+    what was found
 ```
 
 ### Worked example
@@ -114,4 +131,11 @@ CRITICAL, with reasoning: remote code execution is CRITICAL under
 potentially full compromise) regardless of what severity either
 component finding reached alone — here, neither component reached
 CRITICAL, or even HIGH, by itself.
+
+### Adversarial Validation
+
+CONTROL_HOLDS — challenged whether the upload directory's execution
+behavior could be reached through any route other than the upload
+endpoint (technique 7, alternate entry points); no sibling upload path
+or static-file route bypassing the same directory was found.
 ```

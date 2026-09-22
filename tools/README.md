@@ -149,6 +149,24 @@ to investigate, not a false all-clear. If you see a gap referencing a
 CLI mismatch, check the installed tool's `--help`/`--version` against
 the invocation shown above.
 
+## Repository consistency checker
+
+Unlike everything else on this page, this is not a security scanner
+and does not run against a target repository under review — it checks
+this kit's own `plays/`/`skills/`/`templates/`/`tests/` for internal
+consistency (a stale "not wired yet" claim, a status word used in a
+context it doesn't belong in, a dangling file reference, a tracked
+generated artifact). See `plays/repository-consistency.md` for the
+full procedure.
+
+- Invoked as: `scripts/windows/consistency-check.ps1` /
+  `scripts/macos/consistency-check.sh`
+- Pattern source: `tools/consistency-patterns.txt` — read by both
+  scripts, not duplicated in either
+- Output: mechanical recall only, `PASS`/`REVIEW_REQUIRED`/`ERROR` —
+  see `plays/repository-consistency.md`'s "Interpreting output" for
+  why a hit is a place to look, not a confirmed defect
+
 ## Adding a tool later
 
 If a future addition (Java/Go/PHP/Rust/Docker/Kubernetes/cloud

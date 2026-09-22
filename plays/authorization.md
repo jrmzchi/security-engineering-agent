@@ -35,6 +35,19 @@ not the vulnerability itself — the vulnerability is the missing
 authorization check. A sequential ID with a correct ownership check is
 not IDOR; a UUID without an ownership check still is.
 
+**Responding to a failed ownership check: `404 Not Found` vs. `403
+Forbidden`.** Both are defensible; pick one deliberately and apply it
+consistently within an endpoint family, not ad hoc per handler. `404`
+for both "doesn't exist" and "exists but isn't yours" avoids confirming
+that an object with that ID exists at all — relevant when object IDs
+or their existence is itself sensitive (e.g. confirming a competitor's
+internal account number is in use). `403` is more honest about what
+happened and easier to debug, at the cost of that existence signal.
+Whichever is chosen, apply it uniformly — returning `404` for
+not-yours-but-exists while returning `403` for some other case in the
+same family reintroduces the same enumeration signal through
+inconsistency.
+
 ## Missing function authorization
 
 Distinct from object authorization: does the caller have permission to

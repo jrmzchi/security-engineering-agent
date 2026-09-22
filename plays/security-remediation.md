@@ -94,8 +94,9 @@ For "Can the protection be bypassed a different way?" specifically,
 checklist (alternate representations, encoding/canonicalization,
 sibling endpoints, and more) instead of relying on whatever bypass
 attempt comes to mind — apply it in full for any HIGH/CRITICAL
-remediation (see that play's trigger list, which names this exact
-case).
+remediation except an exposure-type one (see that play's trigger list
+and "Structured result metadata" section, which name this exact case
+and its exception).
 
 Result:
 
@@ -113,6 +114,22 @@ FIX_UNVERIFIED          re-validation could not establish one of the above
                         note on why the two must stay distinct)
 REGRESSION_INTRODUCED   the fix broke legitimate functionality, or
                         introduced a new, different security issue
+```
+
+Once `plays/adversarial-validation.md`'s checklist has been considered
+for this remediation (mandatory by default for any HIGH/CRITICAL
+remediation, per that play's trigger list), record:
+
+```text
+Adversarial Validation: FIX_HOLDS | FIX_BYPASSED | FIX_INCONCLUSIVE |
+    NOT_APPLICABLE
+    (see that play's "Structured result metadata" — an evidence tag
+    the re-validation pass weighs, never a replacement for the Result
+    above; use NOT_APPLICABLE only if the underlying finding is
+    exposure-type with no fix behavior to attack — every other HIGH/
+    CRITICAL remediation is on the trigger list by default, so use one
+    of the other three values instead of marking it not applicable)
+Techniques tried: which technique(s) were tried and what they found
 ```
 
 A HIGH/CRITICAL finding cannot become `RESOLVED` without this pass. If

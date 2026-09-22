@@ -1,0 +1,57 @@
+# Shared pattern source for scripts/{windows,macos}/consistency-check.*
+#
+# One rule per non-comment, non-blank line:
+#   CATEGORY|extended-regex-pattern|short description
+#
+# Both consistency-check scripts parse this SAME file — do not
+# hard-code an equivalent list independently in either script (see
+# plays/repository-consistency.md's "No duplicated pattern lists").
+# Matching is case-insensitive. `|` inside a pattern is not supported
+# (the format splits on the first two `|` only) — use a character
+# class, `.`, or a separate line per alternative instead. Use `.` for
+# "any character" (bounding a proximity search, e.g. `X.{0,20}Y`), not
+# `[^\n]` — both scripts match one line at a time, so they're
+# equivalent in principle, but `\n` inside a bracket expression is a
+# PCRE/.NET escape that POSIX `grep -E` does not reliably honor the
+# same way — this was a real bug during this tool's own testing, not a
+# theoretical one.
+#
+# This is recall only — every hit needs a human/agent judgment call
+# before it means anything (see "Tool = recall, Agent/human =
+# judgment" in plays/repository-consistency.md). Do not add a pattern
+# whose every possible match is unambiguously wrong; that belongs in a
+# linter with an actual parser, not here.
+#
+# STALE_TERM: phrases that have historically meant "this wiring/fact
+# is not finished yet" — every one below was lifted from an actual
+# defect found and fixed during this kit's own V3 integration batches,
+# not invented speculatively (see plays/*.md's own "Wired consumers"/
+# "Where this is recorded" sections for the pattern these replaced).
+STALE_TERM|deferred to a later (integration )?batch|self-referential "not wired yet" claim that goes stale the moment the wiring actually lands
+STALE_TERM|not yet wired|same
+STALE_TERM|not consumed yet|same
+STALE_TERM|still points only to|same — a currently-active instruction describing itself as pointing nowhere useful
+STALE_TERM|nothing (yet )?(in this kit )?(automatically )?invokes|same, the "nothing wires this up automatically" phrasing
+STALE_TERM|nothing (yet )?(in this kit )?(automatically )?references|same
+STALE_TERM|nothing (yet )?(in this kit )?(automatically )?computes|same
+STALE_TERM|nothing (yet )?(in this kit )?(automatically )?consults|same
+STALE_TERM|not implemented yet|same, generic phrasing
+STALE_TERM|a future batch|same
+STALE_TERM|has no (chain )?slot( yet)?|a template/report section claiming it has no place for something that may have since been added
+#
+# VOCABULARY: specific term-in-context combinations that were real
+# defects when found, catalogued so the same mistake doesn't recur
+# silently. See plays/finding-validation.md's reuser registry and
+# plays/adversarial-validation.md's "Why this is safe" for the naming
+# discipline these enforce.
+VOCABULARY|CONFIRMED.{0,20}chain|a chain record has no CONFIRMED/REJECTED finding-level status (only Confidence + Chain severity) — see plays/attack-chain-analysis.md and plays/security-gate.md's "Inputs this play consumes"
+VOCABULARY|chain.{0,20}CONFIRMED|same, reversed word order
+VOCABULARY|`INCONCLUSIVE`|bare, unprefixed, backtick-wrapped as a literal token — plays/adversarial-validation.md uses CONTROL_INCONCLUSIVE (finding/chain) or FIX_INCONCLUSIVE (remediation) specifically to avoid this token meaning two different target statuses in the same finding's lifecycle (deliberately requires backticks so this doesn't also match the ordinary English word "inconclusive" in prose)
+VOCABULARY|only validated findings can trigger|an absolutism that became false once a chain record could independently BLOCK on its own severity — see plays/security-gate.md's "Chain records are a second gate input"
+VOCABULARY|\bTARGETED\b.{0,30}budget|plays/review-budget.md deliberately does not use TARGETED as a budget level — that name is already a review MODE (plays/code-review.md); a single review can hold both a mode and a budget at once, so the shared name would be ambiguous
+VOCABULARY|budget.{0,30}\bTARGETED\b|same, reversed word order
+VOCABULARY|\bDEEP\b.{0,30}budget|same collision risk, for the AUDIT budget level specifically (an earlier draft literally used DEEP)
+VOCABULARY|budget.{0,30}\bDEEP\b|same, reversed word order
+#
+# DEPRECATED_PATTERN (optional category — seed as issues are found,
+# do not pre-populate speculatively)

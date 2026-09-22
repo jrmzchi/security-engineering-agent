@@ -50,14 +50,37 @@ automated tooling in this kit currently looks up a chain record as
 part of running the gate — until it does, whoever runs the gate must
 check for one manually and apply those rows by hand.
 
+**Adversarial-validation metadata (`plays/adversarial-validation.md`)
+is not a third gate input** — it is evidence weighed *before* this
+play runs, never a value this play looks up directly. For a finding or
+remediation, the Validator/remediation re-validation pass folds it
+into the ordinary `CONFIRMED`/`REJECTED`/`NEEDS_VERIFICATION` status or
+`RESOLVED`/`STILL_VULNERABLE`/`FIX_UNVERIFIED`/`REGRESSION_INTRODUCED`
+result before this play sees either — gate on that status as always.
+For a chain record, the same tag is weighed into the chain's own
+Confidence field (see that play's "Structured result metadata" for
+each carrier) — but the chain-record gating rows below gate on
+severity at *any* confidence, including `NEEDS_VERIFICATION`, so
+Confidence does not itself change the gate outcome. The tag's only
+path to affecting a gate result is indirect: it may prompt revising
+the chain record itself (removing a step, changing severity) per that
+play's own guidance, and this play then gates on whatever the revised
+record says.
+
 ## Outcomes
 
 ```text
-PASS                     no CONFIRMED findings requiring action, and no
-                          chain record above INFORMATIONAL severity
-PASS_WITH_WARNINGS        CONFIRMED MEDIUM/LOW findings and/or a
-                          MEDIUM/LOW-severity chain record only —
-                          noted, not blocking
+PASS                     no CONFIRMED findings requiring action, no
+                          MEDIUM/LOW candidate left unresolved as
+                          NEEDS_VERIFICATION, and no chain record
+                          above INFORMATIONAL severity
+PASS_WITH_WARNINGS        CONFIRMED MEDIUM/LOW findings, and/or a
+                          MEDIUM/LOW candidate resolved
+                          NEEDS_VERIFICATION (see "Default policy"
+                          below for why that gets the same treatment
+                          as CONFIRMED at this severity), and/or a
+                          MEDIUM/LOW-severity chain record — noted,
+                          not blocking
 AWAITING_VALIDATION       a HIGH/CRITICAL candidate exists that has not
                           yet been through skills/security-validate
 BLOCK                     a HIGH/CRITICAL finding is CONFIRMED, OR a
@@ -99,6 +122,17 @@ HIGH/CRITICAL candidate, validated, still NEEDS
 HIGH/CRITICAL candidate, not yet validated                -> AWAITING_VALIDATION
 CONFIRMED, MEDIUM                                         -> PASS_WITH_WARNINGS
 CONFIRMED, LOW                                             -> PASS_WITH_WARNINGS
+MEDIUM/LOW candidate, validated, still NEEDS
+    VERIFICATION                                            -> PASS_WITH_WARNINGS
+    (same treatment as a CONFIRMED finding of the same
+    severity — the BLOCK/AWAITING_VALIDATION escalation for
+    an unresolved candidate above applies only at HIGH/
+    CRITICAL, where under-reporting risk is highest)
+MEDIUM/LOW candidate, not yet validated                   -> PASS
+    (unlike a HIGH/CRITICAL candidate, a MEDIUM/LOW one
+    being unvalidated doesn't itself block or warrant a
+    note — if it later resolves CONFIRMED or
+    NEEDS_VERIFICATION, the rows above apply then)
 INFORMATIONAL                                               -> PASS
 REJECTED                                                     -> excluded (not gated)
 
