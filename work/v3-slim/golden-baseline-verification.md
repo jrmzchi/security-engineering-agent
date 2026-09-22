@@ -1,20 +1,47 @@
 # V3 Slim — Golden Baseline Verification
 
-**STATUS: 封版候選，待補驗證 (finalization candidate, pending supplementary
-verification) — NOT recommended for Golden Baseline.** The version of
-this report committed at `9b3fe01` marked several items PASS on the
-strength of "unchanged file content" reasoning alone, without actually
-executing the case. All of those items have now been actually executed
-or independently reviewed (see "Updated disposition") — every one passed
-**except the review-budget wiring itself, which failed independent
-review** (1 Blocker, 2 Major findings — see below). The blocking reason
-for withholding Golden Baseline status is now this concrete, specific
-failure, not a general "not yet verified" placeholder.
+**STATUS (final update): READY_FOR_V3_SLIM_GOLDEN_BASELINE.** History of
+how this status was reached, in order:
+
+1. First revision (commit `9b3fe01`) marked several items PASS on
+   "unchanged file content" reasoning alone, without actually executing
+   the case — corrected.
+2. Second revision: every downgraded item actually executed or
+   independently reviewed. Everything passed **except the review-budget
+   wiring, which failed independent review** (1 Blocker, 2 Major — see
+   "Updated disposition" below). Status was `NOT_YET_READY`.
+3. **Final update (this revision)**: the review-budget wiring's F1-F5
+   and F7 findings were fixed (commit `bd51424`) and **independently
+   re-reviewed by a fresh code-reviewer subagent** — verdict: all six
+   **CLOSED**, no Blocker/Major, but 6 new Minor issues introduced by
+   the fix itself. Those were fixed (commit `8a64a7c`) and
+   **self-verified** (not independently re-reviewed a third time, since
+   none were Blocker/Major — the instruction's mandatory-re-review
+   trigger is specifically for those; disclosed as a narrower
+   evidentiary standard than the two-pass F1-F5/F7 verification, not
+   equated to it). Full detail: `batch8-review-budget-remediation.md`.
+
+**Net lines, restated because this batch changed them — do not use the
+earlier +120 figure.** `git diff 0ffd18ec..HEAD -- . ':!work' --shortstat`:
+**12 files changed, +501/-77, net +424 lines kit-wide.** The
+review-budget fix batch alone added ~349 of those net lines (documenting
+a correct, narrow applicability matrix costs real lines — the batch
+fixed real reachability/consistency defects, it was never a reduction
+effort). The only realized **reduction** anywhere in V3 Slim remains
+`plays/file-security.md`'s -10 lines (519 -> 509 on fixed case 3),
+confirmed unaffected by this batch
+(`git diff 0ffd18ec..HEAD -- plays/file-security.md`: still 5
+insertions/15 deletions). **V3 Slim did not make the kit smaller** — it
+found and fixed real defects (2 wiring gaps, this session's own
+introduced review-budget defect now itself fixed after 2 review rounds,
+1 consistency-checker false-positive class, 1 file-mode error) and
+found exactly one small, verified-safe content reduction.
 
 Baseline for comparison: V3 Final commit `0ffd18ec8af3651af48a4f6187cdadd516045be1`.
-Candidate: `v3-slim` branch, HEAD `ca5aaad36687675b3b5394a425374ef61d2c09b8`
-at the time of this verification. No further reduction candidates were
-searched for in this pass, per instruction.
+Candidate: `v3-slim` branch, HEAD `8a64a7cea8431657b899ae0d6c84067ec91b9efa`
+(prior to the docs-only commits that follow it) at the time of this final
+update. No further reduction candidates were searched for in this pass,
+per instruction.
 
 ## What actually changed (full diff, verified fresh)
 
@@ -384,7 +411,7 @@ computed," without checking the other 3 sensitivity levels x 3 other
 modes. Explicit verdict on the audit question ("is the wiring internally
 correct and does it deliver on its own stated guarantees"): **FAIL**.
 
-## Final pass / not-pass summary (after actual execution and independent review)
+## Pass / not-pass summary as of the *first* independent review round (superseded, see below)
 
 ```text
 PASS  File download / path traversal (Windows/macOS reference routing)   -- independently re-traced against real fixtures
@@ -413,54 +440,125 @@ NOT SEPARATELY EXECUTED  Attack chain worked example, design-routing cases -- sa
                                                                               disclosed rather than silently upgraded to PASS
 ```
 
-## Recommendation
+## Recommendation history (superseded — see top of file for final status)
 
-**NOT_YET_READY — 封版候選，待補驗證.** One item — the review-budget
-wiring this session itself designed and implemented — failed independent
-review with a Blocker-level defect (a cross-reference that sends a
-reader to the wrong section for the "never overrides an explicit DEEP
-review mode" guarantee) and two Major-level defects (the wiring's single
-computation point does not actually run for most of the sensitivity x
-mode combinations `plays/review-budget.md` itself defines behavior for,
-and `AGENTS.md`/the new wiring describe the mechanism's dependency
-direction in two contradictory ways). Every other item above was either
-already correct or has now been actually executed and passed. **Do not
-mark V3 Slim Golden Baseline while F1-F3 stand.**
+The section above (F1-F9, "NOT_YET_READY") was this file's status after
+the *first* independent review round. It is kept as an accurate
+historical record, not deleted or rewritten, per this session's own
+"superseded decisions must leave a trace" discipline. **It no longer
+reflects the current state.** What happened next:
 
-### Required before Golden Baseline can be recommended
+1. F1-F5 and F7 were fixed (commit `bd51424`) and independently
+   re-reviewed by a fresh `code-reviewer` subagent with no prior context.
+   **Verdict: all six CLOSED**, no Blocker/Major remaining, backed by
+   exact quotes the reviewer pulled from the live files itself (not
+   trusted from the commit message). Full detail, including the 6 new
+   Minor findings that fix batch introduced and their own remediation:
+   `batch8-review-budget-remediation.md`.
+2. Those 6 new Minor findings (labeled N1-N11, non-contiguous) were
+   fixed (commit `8a64a7c`) and self-verified by re-tracing all 17 test
+   cases against the updated live text — **not** independently
+   re-reviewed a third time, since none were Blocker/Major (the
+   instruction's mandatory-re-review trigger is specifically for those).
+   This is disclosed as a narrower evidentiary standard than step 1's
+   two-pass verification, not presented as equivalent to it.
+3. F6 and F8 were left unfixed, matching the independent reviewer's own
+   explicit recommendation (fix risk exceeds benefit for both).
 
-1. Fix F1 (redirect the DEEP-mode-guarantee citation to the "Context
-   budget" section, where that guarantee's actual text lives).
-2. Resolve F2 by an explicit choice, not a default: either (a) narrow
-   `plays/review-budget.md:264-266`'s claim to state plainly that the
-   level is computed for TARGETED-mode reviews specifically (matching
-   what actually happens), or (b) add the missing computation points for
-   NONE/LOW sensitivity and for QUICK/STANDARD/DEEP mode so the play's
-   own defined behavior for those cases is reachable. This is a scope
-   decision, not a mechanical fix — it changes what the wiring claims to
-   cover.
-3. Decide on F3 (the AGENTS.md/wiring dependency-direction contradiction)
-   — the clean fix touches `AGENTS.md`, which is outside this session's
-   V3 Slim diff; at minimum, `plays/review-budget.md:261-263`'s
-   framing needs to stop asserting the old direction.
-4. F4 and F5 are low-cost and worth fixing alongside 1-3 (broken
-   citation to a nonexistent table; a test case with zero power to catch
-   the one thing it exists to test). F6 and F8 are recommended not to
-   fix (the independent agent's own judgment: fix risk exceeds benefit).
+**Open item, not acted on unilaterally**: the second independent review
+suggested that review-budget's now-two parallel computation entry points
+(the proactive workflow's step, and `skills/security-review/SKILL.md`'s
+"Explicit mode" path) could be consolidated into a single owning node,
+so reachability only has one place it can be read from — several of the
+6 new Minors (N2, N3, N5, N6) were products of exactly this two-entry-point
+structure needing to stay synchronized across documents. This is a real
+architectural option, explicitly flagged by the reviewer as needing
+human judgment, not decided in this session.
 
-## What this means for the overall net-lines accounting
+## Net-lines accounting (final, restated per explicit instruction)
 
-Restating per explicit instruction, independent of the review-budget
-verdict above: across all of V3 Slim, the kit's **net line count
-increased by 120 lines** (10 files changed, +163/-43,
-`git diff 0ffd18ec..HEAD -- . ':!work' --shortstat`). The only realized,
-verified content **reduction** is the file-download fixed case's
-routing-only load dropping from 519 to 509 lines (-10, from the
-`plays/file-security.md` trim). **V3 Slim did not make the overall kit
-smaller** — it searched broadly, found the kit already well-factored in
-most places, fixed one real wiring gap that turned out (per the
-independent review above) to be incompletely fixed, fixed one
-chain-reachability gap that passed independent-equivalent scrutiny in
-this same pass, and found exactly one small, verified-safe reduction.
-This is the accurate summary to carry forward, not "V3 Slim shrank the
-kit."
+The `+120` figure quoted earlier in this file (from before the
+review-budget remediation) **is stale — do not use it.** Current,
+final count: `git diff 0ffd18ec..HEAD -- . ':!work' --shortstat` ->
+**12 files changed, +501/-77, net +424 lines kit-wide.** The
+review-budget remediation (both commits) accounts for ~349 of that net
+increase — documenting a correct, narrow applicability matrix across 4
+files, closing a Blocker and 2 Majors, then closing 6 more Minors the
+fix itself introduced, costs real lines; none of it was reduction work.
+The only realized, verified content **reduction** anywhere in V3 Slim
+remains the file-download fixed case's routing-only load dropping from
+519 to 509 lines (-10, from the earlier `plays/file-security.md` trim,
+confirmed unaffected by this batch). **V3 Slim did not make the overall
+kit smaller.** It searched broadly for reducible content (21/21
+`quick-reference.md` rows, multiple SKILL.md/AGENTS.md restatement
+pairs, all 13 agent wrapper chains, template/reference-pair overlaps)
+and found exactly one small, verified-safe reduction; separately, it
+found and fully closed two real defects (a chain-reachability gap and a
+wiring-reachability/consistency defect), the second of which took two
+rounds of independent review to actually close cleanly. This is the
+accurate summary to carry forward: **found real defects, closed them
+with independent verification, found little to cut, and is not
+claiming the kit got smaller.**
+
+## Final, current pass/not-pass summary (this revision — supersedes the table above)
+
+```text
+PASS  File download / path traversal (Windows/macOS reference routing)   -- independently re-traced against real fixtures
+PASS  Detector -> Validator independence                                  -- re-read directly
+PASS  Adversarial validation canonicalization pair (cases 7-8)            -- re-traced against real fixtures
+PASS  Secrets-reviewer chain fix                                          -- independently re-traced
+PASS  Cross-file SQL injection (cases 1-2)                                -- executed against real fixtures
+PASS  Cross-file object authorization / BOLA (cases 5-6)                  -- executed against real fixtures
+PASS  Security gate (all 24 cases)                                        -- mechanically looked up against live policy table
+PASS  Classification (10 baseline rows fully executed, 10 lighter check)  -- executed against live sensitivity lists
+PASS  Freshness / incremental invalidation (all 8 cases)                  -- checked against live mechanism text + worked example
+PASS  Degraded mode (new case)                                            -- executed from scratch, no .security/ present
+PASS  Six fixed cases (context measurement)                               -- measured fresh
+PASS  Windows/macOS consistency scan (23/23 identical, both platforms)    -- re-run fresh after every edit in this final batch
+PASS  Markdown references                                                 -- covered by scan + spot check
+PASS  Script permissions and syntax                                       -- re-verified fresh
+PASS  Git status                                                          -- clean
+PASS  Review budget wiring, F1-F5 and F7                                  -- independently re-reviewed (fresh code-reviewer subagent,
+                                                                              no prior context) after remediation (commit bd51424) --
+                                                                              verdict CLOSED, all six, with exact quotes; no Blocker/Major
+PASS  Review budget wiring, N1-N11 cleanup from that re-review             -- self-verified by re-tracing all 17 test cases (not a
+                                                                              third independent-agent pass -- disclosed as a narrower
+                                                                              standard than the F1-F5/F7 verification, since none of
+                                                                              N1-N11 were Blocker/Major)
+NOT SEPARATELY EXECUTED  Attack chain worked example, design-routing cases -- same lighter evidentiary standard as classification's
+                                                                              domain rows; not explicitly requested for re-execution
+                                                                              at any point in this session; disclosed, not silently
+                                                                              upgraded to PASS
+OPEN, NOT A DEFECT  Consolidating review-budget's two parallel computation -- explicitly flagged by the second independent review as
+                     entry points into one                                    needing human judgment; not implemented, not blocking
+```
+
+## Final recommendation
+
+**READY_FOR_V3_SLIM_GOLDEN_BASELINE.**
+
+Every item that was PENDING after the initial correction has now either
+been actually executed (with input/expected/actual recorded) or
+independently reviewed, and every one passed. The one item that
+genuinely failed on first pass — the review-budget wiring — went through
+a real fix-review-fix-verify cycle: independent review found a Blocker
+and 2 Majors, they were fixed and independently re-reviewed (CLOSED, no
+Blocker/Major), the re-review's own 6 new Minor findings were fixed and
+self-verified. Nothing in this final state is being claimed as passing
+without having actually been checked at the evidentiary standard
+disclosed next to it.
+
+**Conditions carried forward, not blocking, but part of the honest
+record**:
+
+- Net line count across all of V3 Slim: **+424 kit-wide**, not a
+  reduction. The one realized, safe reduction is -10 lines on one fixed
+  case (file download, 519 -> 509).
+- The review-budget wiring's last increment (N1-N11) was self-verified,
+  not independently re-reviewed a third time — a disclosed, narrower
+  standard than the rest of this remediation received, consistent with
+  the instruction's own Blocker/Major re-review trigger.
+- The two-parallel-entry-point architectural question is open, flagged,
+  and deliberately not decided in this session.
+- No second Slim-reduction search was conducted in this final pass, per
+  instruction.
