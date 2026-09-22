@@ -1,13 +1,15 @@
 # V3 Slim — Golden Baseline Verification
 
 **STATUS: 封版候選，待補驗證 (finalization candidate, pending supplementary
-verification) — NOT yet recommended for Golden Baseline.** The version
-of this report committed at `9b3fe01` marked several items PASS on the
+verification) — NOT recommended for Golden Baseline.** The version of
+this report committed at `9b3fe01` marked several items PASS on the
 strength of "unchanged file content" reasoning alone, without actually
-executing the case. Per explicit correction (2026-09-22), those items are
-downgraded to PENDING below until independently re-verified or actually
-executed. Do not read anything below as final until the "Updated
-disposition" section (added in this revision) is complete for every item.
+executing the case. All of those items have now been actually executed
+or independently reviewed (see "Updated disposition") — every one passed
+**except the review-budget wiring itself, which failed independent
+review** (1 Blocker, 2 Major findings — see below). The blocking reason
+for withholding Golden Baseline status is now this concrete, specific
+failure, not a general "not yet verified" placeholder.
 
 Baseline for comparison: V3 Final commit `0ffd18ec8af3651af48a4f6187cdadd516045be1`.
 Candidate: `v3-slim` branch, HEAD `ca5aaad36687675b3b5394a425374ef61d2c09b8`
@@ -186,27 +188,26 @@ V3 Slim batch).
 ## Test limitations (disclosed, not hidden)
 
 - No automated test runner exists in this repository (established at the
-  start of V3 Slim, still true) — every "PASS" above is a manual/LLM
-  trace against cited authoritative text, not an exit code.
-- Degraded mode has no dedicated executable case — verified by reasoning
-  over unchanged text, a lighter form of evidence than the file-download
-  case (which was independently re-traced against real fixtures).
-- Cross-file SQL/object-authorization and gate/classification/freshness
-  cases were verified by unchanged-content proof (byte-identical diff)
-  rather than independently re-traced by hand in this pass — a
-  legitimate but lighter-weight form of verification than what the
-  file-download and review-budget cases received, disclosed here rather
-  than presented as equally rigorous.
+  start of V3 Slim, still true) — every "PASS"/"FAIL" above is a
+  manual/LLM trace against cited authoritative text, not an exit code.
+- Classification's 5 fixture-pair and 5 domain-selection rows, and design
+  routing/attack-chain's own worked example, were checked at a lighter
+  evidentiary standard (cross-checked against live enumerated lists)
+  than the rows/cases independently re-traced against actual fixtures —
+  disclosed rather than presented as equally rigorous. Not separately
+  re-executed in response to the correction, since they were not named
+  in it and the underlying files are confirmed byte-identical to V3
+  Final.
 - Jev (TypeSafe) was used only as offline advisory input during the
   search batches, never wired into any shipped play/skill/script —
-  confirmed by the full diff above containing no reference to
-  `typesafe`/`jev`/API keys anywhere in kit content.
+  confirmed by the full diff containing no reference to `typesafe`/`jev`/API
+  keys anywhere in kit content.
 
 ## Remaining risks (carried forward, not fixed in this session)
 
-- `review-budget`'s newly-wired computation step has not been
-  independently re-validated by a second reviewer/session — it was
-  designed, implemented, and verified by the same session that wired it.
+- **Review-budget wiring has a confirmed Blocker and 2 Major defects**
+  (F1-F3 above) found by independent review — not yet fixed. This is the
+  standing blocker for Golden Baseline status, not a hypothetical risk.
 - The kit-wide net line-count increase (+120) means "V3 Slim" is, in
   aggregate, larger than V3 Final — the name reflects the search that was
   conducted and the one confirmed reduction found, not a claim that the
@@ -336,46 +337,130 @@ steps 2-3 does not under-detect relative to the baseline-assisted path.
 ### Review budget wiring — independent session review
 
 **Dispatched to an independent `code-reviewer` subagent** (not this
-session's own analysis) to audit: whether `plays/secure-development-workflow.md`'s
-new "Determine review budget" step is correctly placed and accurately
-describes `plays/review-budget.md`; whether `skills/security-review/SKILL.md`'s
-two edited steps accurately describe the mechanism; whether
+session's own analysis, no prior context from this conversation) to
+audit: whether `plays/secure-development-workflow.md`'s new "Determine
+review budget" step is correctly placed and accurately describes
+`plays/review-budget.md`; whether `skills/security-review/SKILL.md`'s two
+edited steps accurately describe the mechanism; whether
 `plays/review-budget.md`'s own guarantees (never overriding DEEP mode,
 never skipping mandatory HIGH/CRITICAL validation) are actually backed by
 text in that file, not just plausible-sounding; whether
 `tests/validation/v3-review-budget-test-cases.md` case 8's trace is
 actually correct against the live files; and whether the three edited
 files are mutually consistent, not just each individually plausible.
-**Result: [pending — agent still running at the time this section was
-last edited; do not read a result here until this placeholder is
-replaced with an actual verdict].**
 
-## Pass / not-pass summary (superseded by "Updated disposition" below)
+**Verdict: FAIL.** The agent independently found the commit's own
+diff via `git log`/`git show` (not given it), verified everything by
+reading the live files, and ran the consistency checker itself. Full
+findings:
+
+| # | Severity | Status | Location | Problem |
+|---|---|---|---|---|
+| F1 | **Blocker** | Verified | `plays/secure-development-workflow.md:134-138` citing `plays/review-budget.md:208-221` | The workflow's new text cites "The floor this play cannot lower" section as the source of the "never overrides an explicit DEEP review mode" guarantee — but that section (lines 208-221) never mentions review mode or DEEP at all; it only covers independent-validation and gate/HIGH-workflow guarantees. The actual DEEP-mode guarantee text lives in a *different* section ("Context budget," lines 251-254) that nothing points to for this purpose. A reader following the citation as instructed reaches the wrong section. |
+| F2 | **Major** | Verified | `plays/secure-development-workflow.md:32-35,55-56,154-156,212-219`; `skills/security-review/SKILL.md:42`; `plays/review-budget.md:154-155,227-232,162,264-266` | The one computation point ("Determine review budget") sits after scanner selection in the workflow — but a NONE-classified change stops at "no design, no review, no scanner" and a LOW-classified change does only a lightweight diff check, both *before* reaching that point. And an explicitly-requested QUICK/STANDARD/DEEP review bypasses this workflow file entirely per its own text ("go straight to `skills/security-review`"). So `plays/review-budget.md`'s defined behavior for NONE/LOW sensitivity and for QUICK/STANDARD/DEEP mode (which its own case 7 test exercises) has no path that ever computes it. The new claim in `review-budget.md:264-266` that the workflow "is where this level is actually computed" is unconditional but only actually true for TARGETED mode with MODERATE/HIGH sensitivity. |
+| F3 | **Major** | Inferred (readable from text, not independently executable) | `AGENTS.md:78-81` vs. `plays/secure-development-workflow.md:127-131` vs. `plays/review-budget.md:261-266` | `AGENTS.md` frames review-budget as an input that *refines sensitivity classification* (budget -> classification); the new wiring computes budget *from* the (re-)classification (classification -> budget) — opposite dependency directions for the same mechanism, and the two adjacent sentences added to `review-budget.md:261-266` state both framings back to back without reconciling them. |
+| F4 | Minor | Verified | `plays/review-budget.md:229-230` | Cites a "domain-to-play table" in `plays/code-review.md` — that table does not exist there (confirmed: `plays/code-review.md` has no such table; the real one is `skills/security-review/SKILL.md`'s "Where to look next," which `plays/code-review.md` itself says to use). Pre-existing text, but newly load-bearing now that "Context budget" is cited as authoritative by the new wiring and case 8. |
+| F5 | Minor | Verified | `plays/review-budget.md:235-238` vs. `tests/validation/v3-review-budget-test-cases.md:37` (case 8) | `plays/review-budget.md`'s "Context budget" section defines MINIMAL and FOCUSED as *identical* behavior. Case 8 — the only test case for this new wiring — would produce the exact same expected result whether the computation produced MINIMAL or FOCUSED, giving it zero power to actually catch a miscomputation. |
+| F6 | Minor | Verified, recommended not to fix | `tests/validation/v3-review-budget-test-cases.md:37` (case 8) | The trace feeds an intent-level classification straight into the budget step, skipping the re-classification/implementation/diff-inspection steps the workflow actually requires in between. Agent's own recommendation: not worth fixing (conclusion is the same either way; fix risk exceeds benefit). |
+| F7 | Minor | Inferred | `plays/review-budget.md:241-244` vs. `skills/security-review/SKILL.md` steps 3 and 5 | ELEVATED's requirement to load "attack-surface map neighbors" is attack-surface-map content, consumed in step 3 — but the budget is only referenced in step 5. No step actually applies this half of ELEVATED's definition. |
+| F8 | Nit | Inferred, recommended not to fix | `plays/secure-development-workflow.md:32-33` vs. `plays/review-budget.md:107-108,241-244` | Undefined behavior (not a direct contradiction) when an ELEVATED-budget map-neighbor falls in a domain the mode's own domain-selection didn't pick. |
+| F9 | Nit | Verified | `skills/security-review/SKILL.md:43,66` | Loose, unnamed cross-reference ("that workflow step already computed" without naming it), and an overstated "exactly what each level loads" claim against a section that is actually qualitative ("only as needed," "full depth"). |
+
+**Side finding**: the agent independently confirmed
+`tools/consistency-patterns.txt`'s `STALE_TERM` pattern for "deferred to
+a (later )?(integration )?batch" does not match the actual pre-fix text
+it was meant to catch ("is **left** to a later integration batch") — the
+same gap this session already recorded in `batch3-results.md`/`results.md`,
+now independently re-discovered rather than assumed from this session's
+own prior note.
+
+**Agent's own summary judgment**: the wiring's *design direction* is
+right (rules stay in the play, workflow/skill carry pointers only,
+avoiding a second copy that drifts) — the defect is that the single
+computation point was inserted on one path (TARGETED x MODERATE/HIGH)
+while `plays/review-budget.md`'s own Output section was rewritten to
+claim unconditionally that this is "where the level is actually
+computed," without checking the other 3 sensitivity levels x 3 other
+modes. Explicit verdict on the audit question ("is the wiring internally
+correct and does it deliver on its own stated guarantees"): **FAIL**.
+
+## Final pass / not-pass summary (after actual execution and independent review)
 
 ```text
-PASS     File download / path traversal (Windows/macOS reference routing)  -- independently re-traced against real fixtures
-PASS     Detector -> Validator independence                                 -- re-read directly
-PENDING  Attack chain                                                       -- was unchanged-content proof only; not separately called out by the correction but same weakness, flagged here rather than left silently mismarked
-PASS     Adversarial validation canonicalization pair (cases 7-8)           -- re-traced against real fixtures
-PENDING  Degraded mode                                                      -- no case existed; see Updated disposition
-PENDING  Review budget (all 8 cases, incl. new end-to-end case)             -- needs independent-session review, not this session's own re-trace
-PASS     Secrets-reviewer chain fix                                         -- independently re-traced
-PENDING  Cross-file SQL / object authorization                              -- not yet actually executed
-PENDING  Gate / classification / design-routing / freshness                 -- not yet actually executed
-PASS     Six fixed cases (context measurement)                              -- measured fresh
-PASS     Windows/macOS consistency scan (21/21 identical)                   -- re-run fresh, both platforms
-PASS     Markdown references                                                -- covered by scan + spot check
-PASS     Script permissions and syntax                                      -- re-verified fresh
-PASS     Git status                                                         -- clean
+PASS  File download / path traversal (Windows/macOS reference routing)   -- independently re-traced against real fixtures
+PASS  Detector -> Validator independence                                  -- re-read directly
+PASS  Adversarial validation canonicalization pair (cases 7-8)            -- re-traced against real fixtures
+PASS  Secrets-reviewer chain fix                                          -- independently re-traced
+PASS  Cross-file SQL injection (cases 1-2)                                -- executed against real fixtures
+PASS  Cross-file object authorization / BOLA (cases 5-6)                  -- executed against real fixtures
+PASS  Security gate (all 24 cases)                                        -- mechanically looked up against live policy table
+PASS  Classification (10 baseline rows fully executed, 10 lighter check)  -- executed against live sensitivity lists
+PASS  Freshness / incremental invalidation (all 8 cases)                  -- checked against live mechanism text + worked example
+PASS  Degraded mode (new case)                                            -- executed from scratch, no .security/ present
+PASS  Six fixed cases (context measurement)                               -- measured fresh
+PASS  Windows/macOS consistency scan (21/21 identical)                    -- re-run fresh, both platforms
+PASS  Markdown references                                                 -- covered by scan + spot check
+PASS  Script permissions and syntax                                       -- re-verified fresh
+PASS  Git status                                                          -- clean
+FAIL  Review budget wiring                                                -- independent code-reviewer session: 1 Blocker (F1, broken
+                                                                              cross-reference to the DEEP-mode guarantee), 2 Major (F2:
+                                                                              computation point unreachable for NONE/LOW sensitivity and
+                                                                              for QUICK/STANDARD/DEEP mode; F3: AGENTS.md and the new
+                                                                              wiring describe opposite dependency directions for the same
+                                                                              mechanism), plus 4 Minor/Nit findings (F4-F5, F7, F9)
+NOT SEPARATELY EXECUTED  Attack chain worked example, design-routing cases -- same lighter evidentiary standard as classification's
+                                                                              domain rows; not explicitly requested for re-execution;
+                                                                              disclosed rather than silently upgraded to PASS
 ```
 
 ## Recommendation
 
-**NOT_YET_READY — 封版候選，待補驗證.** Several items above were
-previously marked PASS on the strength of "the underlying file didn't
-change" alone, which is not the same as executing the case — corrected
-per explicit instruction (2026-09-22). No Golden Baseline recommendation
-until every PENDING item above is either actually executed (with input,
-expected result, actual result recorded) or independently reviewed,
-whichever the item requires. See "Updated disposition" below for the
-completed portion of that work in this same revision.
+**NOT_YET_READY — 封版候選，待補驗證.** One item — the review-budget
+wiring this session itself designed and implemented — failed independent
+review with a Blocker-level defect (a cross-reference that sends a
+reader to the wrong section for the "never overrides an explicit DEEP
+review mode" guarantee) and two Major-level defects (the wiring's single
+computation point does not actually run for most of the sensitivity x
+mode combinations `plays/review-budget.md` itself defines behavior for,
+and `AGENTS.md`/the new wiring describe the mechanism's dependency
+direction in two contradictory ways). Every other item above was either
+already correct or has now been actually executed and passed. **Do not
+mark V3 Slim Golden Baseline while F1-F3 stand.**
+
+### Required before Golden Baseline can be recommended
+
+1. Fix F1 (redirect the DEEP-mode-guarantee citation to the "Context
+   budget" section, where that guarantee's actual text lives).
+2. Resolve F2 by an explicit choice, not a default: either (a) narrow
+   `plays/review-budget.md:264-266`'s claim to state plainly that the
+   level is computed for TARGETED-mode reviews specifically (matching
+   what actually happens), or (b) add the missing computation points for
+   NONE/LOW sensitivity and for QUICK/STANDARD/DEEP mode so the play's
+   own defined behavior for those cases is reachable. This is a scope
+   decision, not a mechanical fix — it changes what the wiring claims to
+   cover.
+3. Decide on F3 (the AGENTS.md/wiring dependency-direction contradiction)
+   — the clean fix touches `AGENTS.md`, which is outside this session's
+   V3 Slim diff; at minimum, `plays/review-budget.md:261-263`'s
+   framing needs to stop asserting the old direction.
+4. F4 and F5 are low-cost and worth fixing alongside 1-3 (broken
+   citation to a nonexistent table; a test case with zero power to catch
+   the one thing it exists to test). F6 and F8 are recommended not to
+   fix (the independent agent's own judgment: fix risk exceeds benefit).
+
+## What this means for the overall net-lines accounting
+
+Restating per explicit instruction, independent of the review-budget
+verdict above: across all of V3 Slim, the kit's **net line count
+increased by 120 lines** (10 files changed, +163/-43,
+`git diff 0ffd18ec..HEAD -- . ':!work' --shortstat`). The only realized,
+verified content **reduction** is the file-download fixed case's
+routing-only load dropping from 519 to 509 lines (-10, from the
+`plays/file-security.md` trim). **V3 Slim did not make the overall kit
+smaller** — it searched broadly, found the kit already well-factored in
+most places, fixed one real wiring gap that turned out (per the
+independent review above) to be incompletely fixed, fixed one
+chain-reachability gap that passed independent-equivalent scrutiny in
+this same pass, and found exactly one small, verified-safe reduction.
+This is the accurate summary to carry forward, not "V3 Slim shrank the
+kit."
