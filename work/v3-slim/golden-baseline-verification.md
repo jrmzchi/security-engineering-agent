@@ -217,6 +217,139 @@ V3 Slim batch).
   recent completed search; a differently-scoped future search might still
   find something this session's specific angles did not.
 
+## Updated disposition (actual execution, 2026-09-22 correction)
+
+Everything below was actually run — input, expected result, actual
+result, and which version's files were used, per instruction. Where a
+version note is omitted, the file(s) the case depends on were confirmed
+byte-identical between V3 Final (`0ffd18ec8af3651af48a4f6187cdadd516045be1`)
+and `v3-slim` immediately before running the case, so the result applies
+to both.
+
+### Cross-file SQL injection (`v3-cross-file-test-cases.md` cases 1-2)
+
+Version: files confirmed byte-identical both versions.
+
+| Case | Input | Expected | Actual (traced by hand, just now) | Result |
+|---|---|---|---|---|
+| 1 | `tests/fixtures/cross_file_sql_unsafe/` (3 files, read in full) | CONFIRMED CRITICAL/HIGH SQL injection | `q` (query string) -> `UsersController.Search` (no validation) -> `UserSearchService.SearchUsers` (no validation) -> `UserRepository.FindByNameLike`'s `$"...{query}..."` string-interpolated `SqlCommand` (`UserRepository.cs:30-32`). Attack path complete end to end with file/line evidence at every link. CONFIRMED HIGH (blast radius: full `Users` table readable/exfiltratable via UNION, unauthenticated) | **PASS** |
+| 2 | `tests/fixtures/cross_file_sql_safe/` (3 files, read in full) | No confirmed finding | Same 3-hop trace, reaching `UserRepository.cs:28-31` where `query` is bound via `command.Parameters.AddWithValue("@query", query)` — genuinely parameterized, no injection possible regardless of input | **PASS** |
+
+### Cross-file object authorization / BOLA (`v3-cross-file-test-cases.md` cases 5-6)
+
+Version: files confirmed byte-identical both versions.
+
+| Case | Input | Expected | Actual (traced by hand, just now) | Result |
+|---|---|---|---|---|
+| 5 | `tests/fixtures/cross_file_object_authz_unsafe/` (3 files, read in full) | CONFIRMED HIGH IDOR/BOLA | `[Authorize]` on `ReportsController` confirms authentication only -> `GetReport(reportId)` passes straight to `ReportService.GetReport(reportId)`, which has no caller-identity parameter at all -> `ReportRepository.FindById` performs no ownership filtering. Sequential `Id` (severity amplifier, not the root cause) makes every report enumerable by any authenticated user. CONFIRMED HIGH | **PASS** |
+| 6 | `tests/fixtures/cross_file_object_authz_safe/` (`ReportService.cs` read in full) | No confirmed finding | `GetReport(reportId, currentUserId)` explicitly checks `report.OwnerUserId != currentUserId`. Confirmed the fixture's own comment is accurate: the sequential ID is *not* what makes this safe (repository still uses plain sequential IDs) — the explicit ownership check is | **PASS** |
+
+### Security gate (`gate-test-cases.md`, all 24 cases)
+
+Version: `plays/security-gate.md` confirmed byte-identical both versions;
+re-read the live "Outcomes"/"Default policy"/precedence/remediation-mapping/
+risk-acceptance sections in full (lines 70-214) and mechanically looked up
+every one of the 24 cases against that live text rather than trusting the
+test document's own stated answer.
+
+| Case | Input | Expected | Looked up in live table | Result |
+|---|---|---|---|---|
+| 1 | CONFIRMED CRITICAL | BLOCK | `CONFIRMED, CRITICAL -> BLOCK` | PASS |
+| 2 | CONFIRMED HIGH | BLOCK | `CONFIRMED, HIGH -> BLOCK` | PASS |
+| 3 | HIGH candidate, not yet validated | AWAITING_VALIDATION | `HIGH/CRITICAL candidate, not yet validated -> AWAITING_VALIDATION` | PASS |
+| 4 | HIGH candidate, validated, NEEDS_VERIFICATION | BLOCK | `...still NEEDS VERIFICATION -> BLOCK` | PASS |
+| 5 | CONFIRMED MEDIUM | PASS_WITH_WARNINGS | `CONFIRMED, MEDIUM -> PASS_WITH_WARNINGS` | PASS |
+| 6 | CONFIRMED LOW | PASS_WITH_WARNINGS | `CONFIRMED, LOW -> PASS_WITH_WARNINGS` | PASS |
+| 7 | INFORMATIONAL only | PASS | `INFORMATIONAL -> PASS` | PASS |
+| 8 | REJECTED only | PASS | `REJECTED -> excluded (not gated)`, nothing left to aggregate | PASS |
+| 9 | No findings | PASS | vacuously, per Outcomes' PASS definition | PASS |
+| 10 | CONFIRMED HIGH + risk acceptance | PASS_WITH_ACCEPTED_RISK | "Explicit risk acceptance": outcome becomes `PASS_WITH_ACCEPTED_RISK` | PASS |
+| 11 | CONFIRMED HIGH + 3 non-BLOCK findings | BLOCK | precedence `BLOCK > ... > PASS`, least-permissive wins | PASS |
+| 12 | HIGH w/ acceptance + MEDIUM w/o | PASS_WITH_ACCEPTED_RISK | `PASS_WITH_ACCEPTED_RISK > PASS_WITH_WARNINGS` | PASS |
+| 13 | HIGH unvalidated + CONFIRMED MEDIUM | AWAITING_VALIDATION | `AWAITING_VALIDATION > PASS_WITH_WARNINGS` | PASS |
+| 14 | Remediation RESOLVED | re-apply table w/o finding | matches "After a remediation attempt" text exactly | PASS |
+| 15 | Remediation STILL_VULNERABLE | BLOCK | "unchanged: still CONFIRMED -> BLOCK" | PASS |
+| 16 | Remediation FIX_UNVERIFIED | BLOCK | "same treatment as...unresolved candidate...BLOCK" | PASS |
+| 17 | Remediation REGRESSION_INTRODUCED | new candidate gates independently | matches text exactly | PASS |
+| 18 | Chain CRITICAL/HIGH-confidence, 2 CONFIRMED MEDIUM components | BLOCK | "Chain record, CRITICAL or HIGH severity, any confidence...BLOCK" (independent of component severities) | PASS |
+| 19 | Chain CRITICAL, NEEDS_VERIFICATION confidence | BLOCK | "any confidence including NEEDS_VERIFICATION -> BLOCK" | PASS |
+| 20 | Chain MEDIUM, HIGH confidence | PASS_WITH_WARNINGS | "Chain record, MEDIUM or LOW severity...PASS_WITH_WARNINGS" | PASS |
+| 21 | Chain CRITICAL + unrelated CONFIRMED LOW | BLOCK | precedence, BLOCK wins | PASS |
+| 22 | Chain INFORMATIONAL | PASS | "Chain record, INFORMATIONAL severity -> PASS" | PASS |
+| 23 | MEDIUM candidate, validated, NEEDS_VERIFICATION | PASS_WITH_WARNINGS | "MEDIUM/LOW candidate, validated, still NEEDS VERIFICATION -> PASS_WITH_WARNINGS" | PASS |
+| 24 | MEDIUM candidate, not yet validated | PASS | "MEDIUM/LOW candidate, not yet validated -> PASS" | PASS |
+
+**24/24 PASS.**
+
+### Classification (`classification-test-cases.md`)
+
+Version: `plays/security-change-detection.md` confirmed byte-identical
+both versions; re-read in full and mechanically cross-checked the 10
+baseline rows against the live Sensitivity levels/lists. All 10 match
+the live text exactly, including two rows that mirror the play's own
+worked examples almost verbatim ("Change a CSS color value" ->
+`plays/security-change-detection.md`'s own "Change the button color from
+blue to gray" example; the file-download-by-filename row ->
+the play's own "Add an endpoint for downloading machine reports by
+filename" example). The 5 fixture-pair rows and 5 domain-selection rows
+were cross-checked against the live HIGH-list enumeration (all 5
+fixture categories — authorization, CORS, SSRF, authentication/session,
+cookies — are explicitly present in the live list) rather than
+individually re-run against the actual fixture files (a lighter check
+than the baseline rows received, disclosed rather than equated). **PASS**
+on the 10 baseline rows with full re-execution; **PASS** on the 10
+fixture/domain rows with a lighter cross-check.
+
+### Freshness (`v3-freshness-test-cases.md`, all 8 cases)
+
+Version: `plays/security-impact-analysis.md` confirmed byte-identical
+both versions; re-read the live "Incremental invalidation" section
+(lines 114-172) and "Worked example" (lines 86-112) in full and
+mechanically checked all 8 cases against that live text.
+
+| Case | Scenario | Expected | Checked against live text | Result |
+|---|---|---|---|---|
+| 1 | File in no fact's `freshnessOf` | No fact stale | "cannot trigger on a fact with an empty `freshnessOf`" / direct-lookup-only | PASS |
+| 2 | File named in a fact's `freshnessOf` | Only that fact stale | "if any path in fact.freshnessOf is in the changed-files set: re-evaluate this fact" | PASS |
+| 3 | UNKNOWN fact + plausible new evidence file | That fact re-evaluated despite empty `freshnessOf` | Exact carve-out text present, same example (new Dockerfile / hosting fact) | PASS |
+| 4 | `Program.cs` auth setup changes | Broader-invalidation: node + connected edges both directions, not whole map | Exact same example (`Program.cs`/`AUTHENTICATION_CONTROL`/`AUTHENTICATES` edges) present in live text | PASS |
+| 5 | One controller action changed, no outside references | Only that endpoint re-evaluated | Ordinary direct-lookup mechanism, matches "incremental" framing | PASS |
+| 6 | Shared authorization handler changes | Broader-invalidation applies | "authentication/authorization bootstrap" explicitly named in the exception text | PASS |
+| 7 | Shared path-resolution helper changes (not auth/routing/config) | Does NOT trigger broader invalidation; ordinary TRANSITIVE mechanism | Confirmed the live "Worked example" uses exactly this shape (`PathResolver.cs`, callers all `TRANSITIVE`) to illustrate the *ordinary* mechanism, not the exception | PASS |
+| 8 | Unrelated CSS change | Attack surface unchanged | No node/edge evidence points at CSS files | PASS |
+
+**8/8 PASS.**
+
+### Degraded mode (new case)
+
+**New file added**: `tests/validation/v3-degraded-mode-test-cases.md`,
+case 1. Actually executed (not reasoned over unchanged text alone):
+traced `tests/fixtures/cross_file_path_traversal_unsafe/` from scratch,
+having confirmed no `.security/` directory exists anywhere in this
+repository, reading `DownloadController.cs`/`FileService.cs`/`PathHelper.cs`
+directly with no baseline/map to consult. Reached the identical CONFIRMED
+HIGH/CRITICAL path-traversal outcome as the normal-mode trace of the same
+fixture (above) — confirming the fallback in `skills/security-review/SKILL.md`
+steps 2-3 does not under-detect relative to the baseline-assisted path.
+**PASS.**
+
+### Review budget wiring — independent session review
+
+**Dispatched to an independent `code-reviewer` subagent** (not this
+session's own analysis) to audit: whether `plays/secure-development-workflow.md`'s
+new "Determine review budget" step is correctly placed and accurately
+describes `plays/review-budget.md`; whether `skills/security-review/SKILL.md`'s
+two edited steps accurately describe the mechanism; whether
+`plays/review-budget.md`'s own guarantees (never overriding DEEP mode,
+never skipping mandatory HIGH/CRITICAL validation) are actually backed by
+text in that file, not just plausible-sounding; whether
+`tests/validation/v3-review-budget-test-cases.md` case 8's trace is
+actually correct against the live files; and whether the three edited
+files are mutually consistent, not just each individually plausible.
+**Result: [pending — agent still running at the time this section was
+last edited; do not read a result here until this placeholder is
+replaced with an actual verdict].**
+
 ## Pass / not-pass summary (superseded by "Updated disposition" below)
 
 ```text
