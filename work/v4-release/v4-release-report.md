@@ -1,5 +1,26 @@
 # V4 release completion report (2026-09-25)
 
+**Final status after the safe-fixture audit and protocol revision 3: `V4_RELEASE_NOT_READY` (not pushed).**
+
+- **Audit** (`53ef539`, corpus `v4-release-corpus/2`): all 24 expected-safe cases were read on their actual code. 8
+  V3 safe fixtures with a real or evidence-supported incidental weakness got V4-release replacements; 16 cases were
+  kept.
+- **Validation** (`7d1a767`, one attempt): RV-01 to RV-14 passed, including the replaced RV-02, RV-04 and RV-13. It
+  stopped at **RV-15** (`cors_restricted_safe.js`, a row the audit **kept**, with a residual note).
+  - The answer was valid, correctly bound and evidence-backed, with one CONFIRMED MEDIUM finding: missing
+    authentication/authorization check.
+  - `/api/account` returns `req.session.user.email` and `.balance` with no session or login guard in the route or the
+    file (`case_12.js:18-20`).
+  - Per rule 10 it is reported, not dismissed, and the fixture was not reclassified or edited.
+- **Audit miss, recorded:** the audit judged this case "no confirmed weakness; relies on session middleware not
+  shown". Jev (advisory) had raised scrutiny on it (0.79); on re-inspection it was kept anyway. The review shows that
+  judgment was wrong: relying on an unshown guard is a finding a correct review can confirm.
+- **Not reached:** 24 corpus cases and all 13 enterprise-identity cases.
+- **Still holding on the final tree:** product tests (250 and 354 OK), fallbacks, feedback-record checks, consistency
+  wrappers, the review gate and the privacy scan.
+
+Section 12 has the details; sections 1–11 are the earlier attempts, unchanged.
+
 **Final status after protocol revision 2 (corrected RV-02): `V4_RELEASE_NOT_READY` (not pushed).**
 
 - **RV-02 correction:** the RV-02 finding from revision 1 was accepted as a real vulnerability in the V3 fixture.
@@ -304,3 +325,57 @@ Authorized as one final attempt on product commit `644d419`, with no product cha
 - **Next (needs a new authorization):** a pass over every safe corpus fixture, before any further validation, to find
   and correct such incidental weaknesses; for this fixture, for example, an allow-listed file name. Then a single new
   validation attempt.
+
+## 12. Safe-fixture audit and final validation, protocol revision 3 (2026-09-25)
+
+**Audit (no model run).** All 24 expected-safe cases were read on their code: 18 rows of the corpus and 6 rows of the
+enterprise-identity set. The results, reasons and replacement fixtures are in `tests/validation/v4-release-corpus.md`.
+
+- **Replaced**, for the V4 release corpus only; V3 fixtures and results unchanged:
+
+  | Row | Incidental weakness in the V3 fixture |
+  |---|---|
+  | RV-02 | CWE-306, users' e-mail addresses |
+  | RV-04 | CWE-88, ImageMagick option and coder injection |
+  | RV-13 | a login issuing a session without credentials |
+  | RV-20 | a login that verifies nothing |
+  | RV-22 | a DNS-rebinding gap and an unbounded response body |
+  | RV-24 | unauthenticated access to user uploads |
+  | RV-35 | an unauthenticated user search returning e-mail addresses |
+  | RV-37 | unauthenticated report download |
+
+- **Kept:** RV-06, RV-07, RV-11, RV-15, RV-17, RV-26, RV-28, RV-31, RV-33, RV-39, and the 6 enterprise-identity rows.
+- **Jev:** one call, the phase's last (8 of 8). It raised scrutiny on 7 kept cases, including RV-15; after
+  re-inspection none was changed.
+- **Deterministic checks:** `tools/context_manifest/tests/test_release_corpus.py`, 15 tests. Its key assertions fail
+  against the original V3 fixtures.
+
+**Validation.**
+
+- **Pins:** tree `53ef539` (product code identical to `644d419`), kit export `98995885…`, manifest `cd6f8e96…`.
+- **Runs:** 30 model runs, all valid; 2 result-tool calls were rejected and then corrected by the runner; 0 binding
+  failures.
+- **Outcomes:**
+  - RV-01–RV-14: PASS. The replaced RV-02, RV-04 and RV-13 each came back NOT_CONFIRMED.
+  - RV-15: FAILED. The answer is quoted above, and its evidence cites only its own file and lines.
+- **Stop rule:** validation stopped at RV-15. No run was repeated or replaced.
+
+**What this shows.**
+
+- The V3 corpus's "safe" snippets repeatedly contain weaknesses that sit outside the property each was written to
+  test. An isolated, case-bound V4 review reports them. A code-reading audit caught 8 of them, but not RV-15, where a
+  missing guard is implied rather than visible.
+- The replaced fixtures reached so far behaved as intended.
+
+**What it does not show.**
+
+- how the remaining 37 cases would have scored;
+- run-to-run stability (one run per case);
+- whether any other kept case has a similar issue.
+
+**Next (needs a new authorization).** Either of these would require it:
+- a stricter fixture standard for "safe" (every entry point self-contained, with an explicit and visible guard or an
+  explicitly public purpose), applied to every remaining safe case;
+- or a decision on how the corpus should treat findings about controls a snippet does not show.
+
+Either would be followed by a new validation. None of it was started here.
