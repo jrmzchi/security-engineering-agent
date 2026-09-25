@@ -1,5 +1,25 @@
 # V4 release completion report (2026-09-25)
 
+**Final status after protocol revision 2 (corrected RV-02): `V4_RELEASE_NOT_READY` (not pushed).**
+
+- **RV-02 correction:** the RV-02 finding from revision 1 was accepted as a real vulnerability in the V3 fixture.
+  RV-02 now uses the public catalog fixture (`v4-release-corpus/1`, commit `ef8a9e4`), and that fixture passed:
+  NOT_CONFIRMED.
+- **New stop:** validation stopped at case 4 of 52 on another safe V3 fixture with a valid, correctly bound,
+  evidence-backed finding.
+  - `RV-04` (`command_injection_safe.js`, expected: no confirmed finding) came back CONFIRMED, HIGH: argument
+    injection (CWE-88).
+  - `req.body.filename` reaches `execFile('convert', [filename, 'output.png'])` with no validation (`case_04.js:7-12`).
+    `execFile` avoids shell injection, but an option-like or coder/protocol-prefixed value (`msl:`, `https:`, ...) is
+    still interpreted by ImageMagick itself.
+  - Per rule 10 the finding is reported, not dismissed, and the fixture was not reclassified or edited.
+- **Other cases:** `RV-01`–`RV-03` passed. The remaining 35 corpus cases and all 13 enterprise-identity cases were not
+  run.
+- **Still holding on the final tree:** product tests (244 and 354 OK), fallbacks, consistency wrappers, the review gate
+  and the privacy scan.
+
+Section 11 has the details.
+
 **Final status after the pre-registered final validation: `V4_RELEASE_NOT_READY` (not pushed).**
 
 - **Protocol:** `work/v4-release/final-validation-protocol.md`, committed before any run (`cf6fe8d`). It uses one
@@ -264,3 +284,23 @@ Authorized as one final attempt on product commit `644d419`, with no product cha
   - then re-validate.
 
   None of that was done here.
+
+## 11. Final validation, protocol revision 2 (2026-09-25)
+
+- **Protocol:** revision 2 (`868ef5d`), committed before any run. The tree validated was `ef8a9e4`: product code
+  identical to `644d419` and kit export `98995885…`. The corpus was `v4-release-corpus/1`, manifest `08cc741c…`.
+- **Runs:** 8 model runs, all valid; 0 rejected tool calls; 0 binding failures; Jev not called.
+- **Results:**
+  - RV-01: PASS.
+  - RV-02 (catalog fixture): PASS, NOT_CONFIRMED.
+  - RV-03 (`command_injection_unsafe.js`): PASS.
+  - RV-04 (`command_injection_safe.js`): FAILED. The answer was valid, bound to its own file and lines, and
+    evidence-backed: CWE-88 argument injection into ImageMagick `convert` through an unvalidated request value.
+- **Stop rule:** per the stop rule and rule 10, the finding is reported as a real, evidence-backed observation about
+  the fixture as written. It is not dismissed, and neither the fixture nor its expected result was changed.
+- **What this shows (together with revision 1):** at least two V3 "safe" fixtures (`sql_injection_safe.py` and
+  `command_injection_safe.js`) contain real weaknesses outside the single property each was written to test, and an
+  isolated, case-bound V4 review reports them. The remaining safe fixtures were not reached, so there may be more.
+- **Next (needs a new authorization):** a pass over every safe corpus fixture, before any further validation, to find
+  and correct such incidental weaknesses; for this fixture, for example, an allow-listed file name. Then a single new
+  validation attempt.
