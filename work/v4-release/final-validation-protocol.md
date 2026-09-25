@@ -1,25 +1,36 @@
-# V4 final release validation — pre-registered protocol (2026-09-25)
+# V4 final release validation — pre-registered protocol, revision 2 (2026-09-25)
 
-Written and committed **before any model run**. One attempt, authorized by the user, on the existing reviewed product
-commit. It authorizes no product change and no further fix or review cycle.
+Written and committed **before any model run** of this attempt. It is one final attempt, authorized by the user after
+the RV-02 decision. It authorizes no product change and no further fixture, fix or review cycle.
+
+**What changed from revision 1 (`cf6fe8d`, stopped at RV-02):** only the corpus.
+- That attempt's RV-02 answer, a CONFIRMED missing-authentication finding on the V3 `sql_injection_safe.py`, is
+  accepted as a real vulnerability in that fixture. It is not suppressed, and the "safe case: no CONFIRMED" rule is
+  unchanged.
+- The validation now uses the versioned corpus `v4-release-corpus/1`
+  (`tests/validation/v4-release-corpus-manifest.json`). RV-02 maps to
+  `tests/fixtures/v4_release/catalog_lookup_parameterized_safe.py`; the other 38 rows map to their unchanged V3
+  fixtures and expected results.
+- It is **not** a V3-versus-V4 comparison set (`tests/validation/v4-release-corpus.md`).
+- Rules 1–9 are unchanged, apart from the reading of rule 4 and the addition of rule 10.
 
 ## Pins
 
 | Item | Value |
 |---|---|
-| Product commit validated | `644d4191dd9e69c69e207c5f93c535ac1e1b6ea9` (commits after it change only `work/v4-release/`) |
-| Kit export | `git archive` of that commit: kit paths, package tests dropped; tree sha256 `989958851b518c4a6ba132120e94f7ca8b4fe12b5606158f4b1b22e86997d525` |
+| Tree validated | `ef8a9e471e18a74fe0186be3a1019f5e971240ed`: product code identical to `644d419`; adds only the RV-02 fixture, the corpus manifest and document, and `tools/context_manifest/tests/test_release_corpus.py` |
+| Kit export | `git archive` of that commit (kit paths, package tests dropped); tree sha256 `989958851b518c4a6ba132120e94f7ca8b4fe12b5606158f4b1b22e86997d525`, identical to the `644d419` export |
+| Corpus manifest | `v4-release-corpus/1`, sha256 `08cc741c8017f57766429240f9b845c7de6b7fac22a03a6513bac4854bf2ef5b`; the adapter reads it from the pinned commit (never the working tree) and stops if a row other than the recorded RV-02 replacement differs from the original 39-row mapping |
+| Expected results | `expected-results.md` `2fac68d5…`, `v4-release-corpus.md` `3e55aad1…`, `v4-enterprise-identity-expected-results.md` `320581bc…` |
 | Runner | restricted `claude -p` (CLI `2.1.282`), `--model sonnet` (`claude-sonnet-5`), effort `high`, tools Read/Grep/Glob + the result tool only, no shell |
-| Structured-channel library | `v4-planning` at `72dadd1`, used read-only as a library (transcript, context and channel checks); package sha256 `ca5476b7eb684ed3d2d2ac48e965dd7d1c3ea27185edaace6381cb5295d412fd` |
-| External adapter (local, outside the release tree, not shipped) | `caseval.py` `241738efa75f4594e0946f7441b22010bbf52d88abf2772b1fd1f0960cdd48a4`, `caseresult.py` `42eb03657c6b4dd8a4b59ecff9b27558df892baa0798a3871312efcc97033b00`, `relman.py` `6e18acc02f8c847d3394d1374afc1e22c26df0aff82bd705af3fa6d47aa79d7d` (LF-normalized) |
-| Manifests | built and validated by the release tree's own `tools/context_manifest` (identical at `644d419`), no key |
+| Structured-channel library | `v4-planning` at `72dadd1`, used read-only; package sha256 `ca5476b7eb684ed3d2d2ac48e965dd7d1c3ea27185edaace6381cb5295d412fd` |
+| External adapter (local, outside the release tree, not shipped) | `caseval.py` `de7f62c627324fed0e986f946a5406108e8f96da75d2ffcaafd5e643ddd9aae7` (revision 1 plus the manifest-driven plan), `caseresult.py` `42eb03657c6b4dd8a4b59ecff9b27558df892baa0798a3871312efcc97033b00`, `relman.py` `6e18acc02f8c847d3394d1374afc1e22c26df0aff82bd705af3fa6d47aa79d7d` (LF-normalized) |
+| Manifests | built and validated by the release tree's own `tools/context_manifest` (no key) |
 | Jev | not called |
 
-The adapter's binding and grading were tested with 18 synthetic positive and negative cases before dispatch (another
-case's file, `..` and absolute paths, lines outside the file, a wrong case or run id, a status the form forbids, an
-unbound member, missing evidence; stored-XSS accounting, distinct findings, safe-case CONFIRMED, wrong class). The
-server itself was also exercised over JSON-RPC: it rejected a foreign path, accepted a valid submission and refused
-a duplicate.
+The adapter's binding, grading and manifest handling were tested before dispatch with 20 synthetic cases. That
+covers revision 1's 18, plus: the plan is taken from the pinned manifest, and a tampered manifest (changed row,
+missing replacement record, other version, missing row) stops the run.
 
 ## Rules
 
@@ -43,8 +54,9 @@ a duplicate.
 3. **Post-submission re-check.** The harness re-validates the accepted submission: case id, members, that every cited
    path belongs to the case, and line ranges. A response that cites another case's files is **invalid** and is never
    graded under the wrong case.
-4. **Grading** against the expected-results sources, per entry text (category and summary). Distinct expected findings
-   need distinct entries:
+4. **Grading** against the expected-results sources of the pinned corpus (per row, as the manifest's
+   `expectationSource` names), per entry text (category and summary). Distinct expected findings need distinct
+   entries:
    - `hardcoded_secret_unsafe.py`: the AWS key pair and the database connection string;
    - `ldap_connection_unsafe.cs`: cleartext bind, hardcoded password, and LDAP filter injection.
 
@@ -64,7 +76,10 @@ a duplicate.
 8. **No answer exposure.** Runners never see fixture names, expected results or other cases; the kit is the pinned
    export.
 9. **Limit.** One run per case does not establish run-to-run stability.
+10. **A finding on another safe fixture.** If any other safe case gets a valid, evidence-backed CONFIRMED finding,
+    validation stops and reports it as a failed case. The finding is not dismissed, and the fixture is not
+    reclassified or edited in this attempt.
 
-**Result rule.** All 52 cases must pass. Beyond that, the product unit tests, fallback checks, review gate and privacy
+**Result rule.** All 52 cases (39 corpus rows + 13 enterprise-identity rows) must pass. Beyond that, the product unit tests, fallback checks, review gate and privacy
 scan must still hold on `644d419` for `V4_RELEASE_READY`. Anything else is `V4_RELEASE_NOT_READY`, with no further
 repair or validation cycle.
