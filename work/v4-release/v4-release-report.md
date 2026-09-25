@@ -1,5 +1,27 @@
 # V4 release completion report (2026-09-25)
 
+**Final status after the strict safe-fixture audit and protocol revision 4: `V4_RELEASE_NOT_READY` (not pushed).**
+
+- **Audit** (`4e4e626`, corpus `v4-release-corpus/3`): all 24 expected-safe cases were re-read under a strict standard.
+  A safe negative must contain the controls its safety depends on. 18 were safe as they were. 6 got a V4-release
+  fixture with the needed controls inside the case: RV-04, RV-15, RV-24, RV-26, RV-28 and RV-37. Jev was not called.
+- **Validation** (`cedcf19`, one attempt): RV-01 to RV-28 passed, including all 9 replaced rows reached (RV-02, 04, 13,
+  15, 20, 22, 24, 26, 28). It stopped at **RV-29** (`upload_webroot_content_disposition_deceptive.cs`, an expected
+  **unsafe** row).
+  - The answer was valid and correctly bound. It CONFIRMED two path traversals (upload write, download read) but put
+    **upload -> stored XSS** at NEEDS_VERIFICATION.
+  - Its stated reason: the static-file serving of `wwwroot` (`UseStaticFiles`) is not in the reviewed file.
+  - The pre-registered grading requires a CONFIRMED stored-XSS entry, so this is a failed case. It was not rerun, and
+    the grader was not changed.
+- **Recorded tension, not resolved here:** the fixture's code indeed contains no `UseStaticFiles()`; only the stripped
+  header comments assert it. The strict standard applied in this audit (no middleware assumed that the case does not
+  contain) was applied to safe cases only. Applied to this unsafe case, the runner's answer follows the same standard.
+- **Not reached:** RV-30 to RV-39 and all 13 enterprise-identity cases.
+- **Still holding on the final tree:** product tests (255 and 354 OK), fallbacks, feedback-record checks, consistency
+  wrappers, the review gate and the privacy scan.
+
+Section 13 has the details; sections 1–12 are the earlier attempts, unchanged.
+
 **Final status after the safe-fixture audit and protocol revision 3: `V4_RELEASE_NOT_READY` (not pushed).**
 
 - **Audit** (`53ef539`, corpus `v4-release-corpus/2`): all 24 expected-safe cases were read on their actual code. 8
@@ -377,5 +399,67 @@ enterprise-identity set. The results, reasons and replacement fixtures are in `t
 - a stricter fixture standard for "safe" (every entry point self-contained, with an explicit and visible guard or an
   explicitly public purpose), applied to every remaining safe case;
 - or a decision on how the corpus should treat findings about controls a snippet does not show.
+
+Either would be followed by a new validation. None of it was started here.
+
+## 13. Strict safe-fixture audit and final validation, protocol revision 4 (2026-09-25)
+
+**Audit (no model run, no Jev call).** Every expected-safe case (18 corpus rows, 6 enterprise-identity rows) was
+checked for its entry points, data sources, outputs, sensitive data and access control. Controls outside the case
+(middleware, session setup, proxy) were not assumed to exist. The per-case checklist is
+`work/v4-release/safe-fixture-audit.md`.
+
+- **Safe as they were:** 18 (RV-02, 06, 07, 11, 13, 17, 20, 22, 31, 33, 35, 39 and the 6 enterprise-identity rows).
+- **Needed context, made verifiable in a V4-release fixture:** 6 cases, in corpus `v4-release-corpus/3`, 11 replaced
+  rows. V3 fixtures and results unchanged:
+
+  | Row | What the V4-release fixture now contains |
+  |---|---|
+  | RV-04 | a concurrency bound (429) and a 1 kB body limit around the argument-array `execFile` |
+  | RV-15 | session middleware with a required 32+ character secret, cookie flags, a `requireSignedIn` guard, and a single non-sensitive route |
+  | RV-24, RV-26, RV-37 | a reparse-point (link) check on the file and on every ancestor directory up to the base |
+  | RV-28 | a required secret key, cookie flags, a size limit, a sign-in decorator, and a per-user directory with a file cap |
+
+- **Deterministic checks:** `tools/context_manifest/tests/test_release_corpus.py`, 20 tests. The `/3` assertions fail
+  against the superseded fixtures.
+
+**Validation.**
+
+- **Pre-registered:** protocol revision 4 (`cedcf19`), committed before any model run. It adds rule 5a: a
+  NEEDS_VERIFICATION on a safe case must name the missing control or evidence, checked by a stated mechanical proxy.
+- **Pins:** tree `4e4e626`, kit export `98995885…`, manifest `10133e15…`, adapter `d3acdd90…`.
+- **Runs:** 58 model runs, all valid; 0 rejected result-tool calls; 0 binding failures; `claude-sonnet-5`, effort
+  `high` on every run.
+- **Outcomes:**
+  - RV-01–RV-28: PASS.
+  - Replaced rows: NOT_CONFIRMED except RV-04, RV-13 and RV-26, which were NEEDS_VERIFICATION. Each of those names its
+    missing evidence, as rule 5a requires. For example, RV-04 says no authentication is visible and the file only
+    exports the app.
+  - RV-29: FAILED. The upload -> stored-XSS finding is NEEDS_VERIFICATION, not CONFIRMED. Both path traversals are
+    CONFIRMED.
+- **Stop rule:** validation stopped at RV-29. No run was repeated or replaced.
+
+**What this shows.**
+
+- The strict audit's replacements behaved as intended on every replaced row reached: none drew a CONFIRMED finding.
+- The stop is on the other side of the same question: an **unsafe** V3 fixture whose exploitability depends on a
+  control outside the case, here static-file serving of `wwwroot`. The fixture asserts that control in comments only.
+- A kit review that follows `plays/finding-validation.md` and refuses to assume unshown middleware can give exactly
+  this answer.
+
+**What it does not show.**
+
+- how RV-30 to RV-39 and the 13 enterprise-identity cases would have scored;
+- run-to-run stability (one run per case);
+- whether the kit's own guidance should confirm stored XSS for an upload under `wwwroot` without the hosting code
+  (`plays/file-security.md` covers uploads under "a directory the app serves statically (e.g. ASP.NET Core wwwroot/
+  via StaticFiles ...)", but does not say whether that serving must be visible in the reviewed code). That is a
+  product question, not decided here.
+
+**Next (needs a new authorization).** Either of these would require it:
+- applying the same "contains what it depends on" standard to the **unsafe** fixtures, starting with RV-29 (e.g. a
+  V4-release variant that includes `UseStaticFiles()`);
+- or deciding that the kit should confirm upload -> stored XSS under `wwwroot` without seeing the hosting code, and
+  changing the product guidance accordingly.
 
 Either would be followed by a new validation. None of it was started here.
