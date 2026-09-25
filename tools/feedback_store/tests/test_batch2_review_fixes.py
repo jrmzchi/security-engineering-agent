@@ -89,14 +89,15 @@ class ValidatorErrorTextTests(unittest.TestCase):
 
 
 class FormatCharacterPathSegmentTests(unittest.TestCase):
-    """Pins CURRENT behaviour only. U+200B is Unicode category Cf, not
-    White_Space, so the whitespace-only-segment rule does not cover it.
-    Whether paths may contain format characters is an open policy
-    question deferred to a later batch -- if that policy changes, this
-    test is expected to change with it, deliberately."""
+    """U+200B is Unicode category Cf, not White_Space, so the
+    whitespace-only-segment rule does not cover it. This test used to pin
+    its ACCEPTANCE while the policy was open; the V4 release decided the
+    policy (paths.py: any Cf character is rejected), so it now pins the
+    rejection. The wider matrix is in test_release_fixes.py."""
 
-    def test_zero_width_space_segment_is_currently_accepted(self):
-        self.assertEqual(paths.normalize("src/​/R.cs"), "src/​/R.cs")
+    def test_zero_width_space_segment_is_rejected(self):
+        with self.assertRaises(paths.InvalidPathError):
+            paths.normalize("src/\u200b/R.cs")
 
     def test_ordinary_whitespace_segment_still_rejected(self):
         with self.assertRaises(paths.InvalidPathError):

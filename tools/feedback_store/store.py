@@ -94,6 +94,56 @@ def _lock_path_for(path: str) -> str:
     return path + ".lock"
 
 
+def _breaker_path_for(lock_path: str) -> str:
+    return lock_path + ".break"
+
+
+def _break_stale_lock(lock_path: str) -> Optional[bool]:
+    """[ADDED, V4 release: closes the stale-lock double-acquisition
+    TOCTOU deferred since Round 3.] Removing a stale lock used to be a
+    bare `os.remove()` after an age check made outside any lock: two
+    waiters that both saw the SAME stale lock could interleave so that
+    the first removed it and acquired a fresh lock, and the second --
+    still acting on its earlier stale observation -- then removed that
+    fresh lock and acquired too. Both then held the lock and one update
+    could be silently lost.
+
+    Now the removal happens only while holding an exclusive breaker
+    marker (`<lock>.break`, `O_CREAT | O_EXCL`), and the lock's age is
+    RE-CHECKED under that marker: a lock that has since been re-created
+    (fresh mtime) is left alone. Every other writer only ever creates
+    the lock with `O_EXCL`, so between the re-check and the removal no
+    one but the marker holder can replace the stale file.
+
+    Returns True if the stale lock was removed, False if it is gone or
+    no longer stale (retry the ordinary acquisition), None if it could
+    not be removed or another process holds the marker (contention).
+    A marker left behind by a crash is never broken automatically: it
+    only disables the automatic stale-lock removal, so acquisition then
+    times out and fails closed with a manual-removal message.
+    """
+    breaker = _breaker_path_for(lock_path)
+    try:
+        fd = os.open(breaker, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(fd)
+    except OSError:
+        return None
+    try:
+        try:
+            age = time.time() - os.path.getmtime(lock_path)
+        except OSError:
+            return False
+        if age <= LOCK_STALE_SECONDS:
+            return False
+        try:
+            os.remove(lock_path)
+            return True
+        except OSError:
+            return None
+    finally:
+        _release_lock(breaker)
+
+
 def _acquire_lock(path: str, *, timeout: float = LOCK_TIMEOUT_SECONDS) -> str:
     """[ADDED, per a round-1 independent review Major]: `write()`'s
     original hash-check-then-`os.replace()` sequence had a real
@@ -136,13 +186,13 @@ def _acquire_lock(path: str, *, timeout: float = LOCK_TIMEOUT_SECONDS) -> str:
                 age = time.time() - os.path.getmtime(lock_path)
             except OSError:
                 age = 0.0  # lock disappeared between the failed open and stat -- just retry
-            if age > LOCK_STALE_SECONDS:
-                removed = False
-                try:
-                    os.remove(lock_path)
-                    removed = True
-                except OSError:
-                    pass
+            # A stale lock is removed only through `_break_stale_lock()`,
+            # which re-checks the age under its own exclusive marker; a
+            # False result (gone, or re-created fresh by another writer
+            # since the stat above) falls through to ordinary contention.
+            broken = _break_stale_lock(lock_path) if age > LOCK_STALE_SECONDS else False
+            if broken is not False:
+                removed = broken is True
                 # [CORRECTED, per a Round 3 independent review Minor]:
                 # this branch used to `continue` unconditionally, never
                 # checking `deadline` -- a stale lock that could not be
@@ -176,8 +226,9 @@ def _acquire_lock(path: str, *, timeout: float = LOCK_TIMEOUT_SECONDS) -> str:
                     raise LockTimeoutError(
                         f"could not acquire write lock {lock_path!r} within {timeout}s -- a stale lock "
                         f"(older than {LOCK_STALE_SECONDS}s) is present but could not be removed "
-                        f"({exc.__class__.__name__}). If you are sure no writer is actually running, "
-                        "delete this lock file by hand."
+                        f"({exc.__class__.__name__}; or its breaker marker {_breaker_path_for(lock_path)!r} "
+                        "is held or was left behind). If you are sure no writer is actually running, "
+                        "delete these files by hand."
                     )
                 time.sleep(LOCK_POLL_INTERVAL_SECONDS)
                 continue
@@ -471,6 +522,15 @@ def _validate_all_records(rejection_records: Mapping, miss_records: Mapping) -> 
         if record.get("recordId") != record_id:
             raise schema.SchemaError(f"missRecords key {record_id!r} does not match recordId {record.get('recordId')!r}")
         schema.validate_miss_record(record)
+    # [ADDED, V4 release]: append already refuses an id that exists in
+    # the other collection; load/write did not, so a hand-edited or
+    # merged file could carry one id in both, and the audit trail (which
+    # names a reused record by id alone) would be ambiguous. Refused here,
+    # so load() degrades the whole store (every candidate gets full
+    # validation) and write() refuses to persist it.
+    shared = sorted(set(rejection_records) & set(miss_records))
+    if shared:
+        raise schema.SchemaError(f"record id(s) {shared!r} appear in both rejectionRecords and missRecords")
     return has_legacy_records
 
 

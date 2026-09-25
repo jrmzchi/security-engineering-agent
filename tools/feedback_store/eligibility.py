@@ -22,6 +22,7 @@ an excuse to skip evaluating the others, per explicit instruction ("不
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Iterable, List, Mapping, Optional
 
@@ -60,7 +61,14 @@ def hop_key(path: str, qualified_symbol: str) -> str:
     # `paths.canonical` (not `validate`) so a hop recorded as
     # `src/R.cs` and confirmed by the caller as `src/r.cs` build the
     # SAME key -- one path-comparison rule everywhere (paths.py).
-    return f"{paths.canonical(path)}::{qualified_symbol}"
+    #
+    # [CORRECTED, V4 release]: the key used to be `path + "::" + symbol`.
+    # A path may contain "::" and a C++ qualifiedSymbol always does, so
+    # ("a::b", "c.d") and ("a", "b::c.d") built the same key and a
+    # confirmation for one hop satisfied check (d) for the other -- the
+    # fail-open direction. A JSON array is an unambiguous encoding of
+    # the pair (every string is quoted and escaped).
+    return json.dumps([paths.canonical(path), qualified_symbol], ensure_ascii=False)
 
 
 def _check_a_pattern_and_scope(pattern_and_scope_match: Optional[bool]) -> Optional[str]:

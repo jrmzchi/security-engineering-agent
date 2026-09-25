@@ -79,16 +79,27 @@ def normalize(raw: str) -> str:
     # legitimate file name and still passes.
     #
     # Scope of "whitespace" here is `str.strip()`, i.e. Unicode
-    # White_Space. Format characters (general category Cf, e.g. U+200B
-    # ZERO WIDTH SPACE, U+200D, U+FEFF) are NOT White_Space and are NOT
-    # rejected: a segment made only of U+200B currently passes. No
-    # policy on format characters in paths exists yet; that decision is
-    # deferred to a later batch rather than widened here (Batch 2
-    # independent review, extra finding; pinned by
-    # tests/test_batch2_review_fixes.py).
+    # White_Space.
+    #
+    # [POLICY DECIDED, V4 release; deferred since the Batch 2 review]:
+    # a path containing ANY Unicode format character (general category
+    # Cf -- U+200B ZERO WIDTH SPACE, U+200D, U+FEFF, the bidirectional
+    # controls U+202A-U+202E / U+2066-U+2069, ...) is rejected, not only
+    # a Cf-only segment. Such characters are invisible or reorder the
+    # displayed text, so a stored path in an audit trail could look like
+    # a different file. Rejection is the fail-closed direction: a record
+    # cannot be created with such a path, a store holding one degrades
+    # whole on load, and a changed-files list containing one makes the
+    # reuse check raise instead of treating the file as unchanged.
+    # Checked here so normalize/validate/canonical all agree. Cost,
+    # accepted: a repository whose real file names contain Cf characters
+    # (rare in source trees; emoji ZWJ sequences are the realistic case)
+    # gets no Evidence Reuse for those files.
     for p in parts:
         if not p.strip():
             raise InvalidPathError(f"path contains a whitespace-only segment: {raw!r}")
+        if any(unicodedata.category(ch) == "Cf" for ch in p):
+            raise InvalidPathError(f"path contains a Unicode format character (category Cf): {raw!r}")
     return "/".join(parts)
 
 
