@@ -1,4 +1,4 @@
-"""V4 release corpus manifests (v4-release-corpus/1 to /3, kept as records; v4-release-corpus/4, current) and the
+"""V4 release corpus manifests (v4-release-corpus/1 to /4, kept as records; v4-release-corpus/5, current) and the
 V4-release replacement fixtures.
 
 Deterministic checks only -- whether a reviewer reaches the right verdict needs a review run:
@@ -6,7 +6,9 @@ Deterministic checks only -- whether a reviewer reaches the right verdict needs 
   points at an existing fixture; every other row maps to its unchanged V3 fixture and V3 result;
 - each safe replacement fixture keeps the property its V3 row tests, and none returns user or account data;
 - RV-29's replacement (expected unsafe, /4) shows its hosting path in code, and its expected findings' evidence
-  anchors exist in it -- while the V3 fixture has no hosting code for the stored-XSS anchor to bind to.
+  anchors exist in it -- while the V3 fixture has no hosting code for the stored-XSS anchor to bind to;
+- RV-28's /5 replacement keeps every control of the /3 fixture and reserves its quota slot atomically (the race
+  itself is exercised in test_release_fixture_quota.py).
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ V1 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-manifest.json"
 V2 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-v2-manifest.json")
 V3 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-v3-manifest.json")
 V4 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-v4-manifest.json")
+V5 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-v5-manifest.json")
 REPLACED_V2 = {"RV-02", "RV-04", "RV-13", "RV-20", "RV-22", "RV-24", "RV-35", "RV-37"}
 REPLACED_V3 = REPLACED_V2 | {"RV-15", "RV-26", "RV-28"}
 REPLACED_UNSAFE_V4 = {"RV-29"}
@@ -103,8 +106,8 @@ class ManifestTests(unittest.TestCase):
             self.assertEqual(rows[cid]["replaces"]["previousV4Fixture"], prev)
             self.assertTrue(os.path.exists(os.path.join(FIX, prev)), prev)
 
-    def test_v4_current(self):
-        self.check_manifest(V4, "v4-release-corpus/4", REPLACED_V3, current=True, replaced_unsafe=REPLACED_UNSAFE_V4)
+    def test_v4_record(self):
+        self.check_manifest(V4, "v4-release-corpus/4", REPLACED_V3, replaced_unsafe=REPLACED_UNSAFE_V4)
         self.assertEqual(_load(V4)["supersedes"], "v4-release-corpus/3")
         v3 = {r["caseId"]: r for r in _load(V3)["rows"]}
         for r in _load(V4)["rows"]:
@@ -112,9 +115,23 @@ class ManifestTests(unittest.TestCase):
                 self.assertEqual(r, v3[r["caseId"]], r["caseId"])
         self.assertEqual(_load(V4)["enterpriseIdentity"], _load(V3)["enterpriseIdentity"])
 
-    def test_v2_to_v4_keep_every_form_and_member_of_v1(self):
+    def test_v5_current(self):
+        self.check_manifest(V5, "v4-release-corpus/5", REPLACED_V3, current=True, replaced_unsafe=REPLACED_UNSAFE_V4)
+        self.assertEqual(_load(V5)["supersedes"], "v4-release-corpus/4")
+        v4 = {r["caseId"]: r for r in _load(V4)["rows"]}
+        for r in _load(V5)["rows"]:
+            if r["caseId"] != "RV-28":
+                self.assertEqual(r, v4[r["caseId"]], r["caseId"])
+        rv28 = next(r for r in _load(V5)["rows"] if r["caseId"] == "RV-28")
+        self.assertEqual(rv28["fixture"], "v4_release/file_upload_authenticated_quota_atomic_safe.py")
+        self.assertEqual(rv28["replaces"]["previousV4Fixture"], "v4_release/file_upload_authenticated_safe.py")
+        self.assertEqual(rv28["replaces"]["rowId"], v4["RV-28"]["replaces"]["rowId"])
+        self.assertTrue(os.path.exists(os.path.join(FIX, rv28["replaces"]["previousV4Fixture"])))
+        self.assertEqual(_load(V5)["enterpriseIdentity"], _load(V4)["enterpriseIdentity"])
+
+    def test_v2_to_v5_keep_every_form_and_member_of_v1(self):
         v1 = {r["caseId"]: r for r in _load(V1)["rows"]}
-        for r in _load(V2)["rows"] + _load(V3)["rows"] + _load(V4)["rows"]:
+        for r in _load(V2)["rows"] + _load(V3)["rows"] + _load(V4)["rows"] + _load(V5)["rows"]:
             with self.subTest(row=r["caseId"]):
                 self.assertEqual((r["form"], r["member"], r["expected"]), (v1[r["caseId"]]["form"], v1[r["caseId"]]["member"], v1[r["caseId"]]["expected"]))
 
@@ -371,6 +388,38 @@ class Revision4Rv29HostingTests(unittest.TestCase):
         self.assertFalse(any(hosting in ln for ln in old.split("\n")))
         with open(self.OLD, encoding="utf-8") as fh:
             self.assertIn("UseStaticFiles()", fh.read())   # asserted in its comments only
+
+
+class Revision5Rv28QuotaTests(unittest.TestCase):
+    """RV-28 (/5): the /3 fixture's controls are all kept; only the quota changes, to an atomic reservation."""
+    OLD = os.path.join(FIX, "v4_release", "file_upload_authenticated_safe.py")
+    NEW = os.path.join(FIX, "v4_release", "file_upload_authenticated_quota_atomic_safe.py")
+
+    def test_every_control_of_the_previous_fixture_is_kept(self):
+        code = _code(self.NEW)
+        with open(self.NEW, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+        upload = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "upload")
+        self.assertEqual([ast.unparse(d) for d in upload.decorator_list],
+                         ["app.route('/upload', methods=['POST'])", "signed_in_required"])
+        self.assertIn('isinstance(session.get("user_id"), int)', code)
+        for cfg in ("SESSION_COOKIE_HTTPONLY=True", "SESSION_COOKIE_SECURE=True", 'SESSION_COOKIE_SAMESITE="Strict"',
+                    "MAX_CONTENT_LENGTH=5 * 1024 * 1024"):
+            self.assertIn(cfg, code)
+        self.assertRegex(code, r"if len\(SECRET_KEY\) < 32:\s*raise")
+        self.assertIn("sniff_extension(data)", code)
+        self.assertIn('f"{uuid.uuid4().hex}.{ext}"', code)
+        self.assertNotIn("f.filename", code)
+        self.assertNotRegex(code, r"static")
+
+    def test_the_quota_is_an_exclusive_create_per_slot_released_on_failure(self):
+        code = _code(self.NEW)
+        self.assertIn("fd = os.open(slot, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)", code)
+        self.assertIn("for number in range(MAX_FILES_PER_USER):", code)
+        self.assertNotIn("listdir", code)
+        self.assertRegex(code, r"except BaseException:\s*if created:\s*os\.unlink\(path\)\s*os\.unlink\(slot\)\s*raise")
+        self.assertIn("if generated_name is None:\n        abort(429", code)
+        self.assertIn("if len(os.listdir(user_dir)) >= MAX_FILES_PER_USER:", _code(self.OLD))   # regression input kept
 
 
 if __name__ == "__main__":

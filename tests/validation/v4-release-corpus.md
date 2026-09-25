@@ -1,10 +1,11 @@
-# V4 release validation corpus (`v4-release-corpus/4`)
+# V4 release validation corpus (`v4-release-corpus/5`)
 
 The V4 release is validated against a versioned corpus with 39 rows, `RV-01` to `RV-39`.
 
-- **Current version:** `v4-release-corpus/4`, `tests/validation/v4-release-corpus-v4-manifest.json`.
+- **Current version:** `v4-release-corpus/5`, `tests/validation/v4-release-corpus-v5-manifest.json`.
 - **Earlier versions, kept as records:** `/1` (`v4-release-corpus-manifest.json`), `/2`
-  (`v4-release-corpus-v2-manifest.json`) and `/3` (`v4-release-corpus-v3-manifest.json`).
+  (`v4-release-corpus-v2-manifest.json`), `/3` (`v4-release-corpus-v3-manifest.json`) and `/4`
+  (`v4-release-corpus-v4-manifest.json`).
 
 27 rows are the V3 corpus rows of `tests/validation/expected-results.md`, unchanged: same fixtures, members, forms
 and expected results. **11 safe rows use V4-release fixtures**, listed below, and **one unsafe row, RV-29, uses a
@@ -39,11 +40,11 @@ genuinely public purpose with no sensitive data.
 | RV-15 | `cors_restricted_safe.js` | `/api/account` reads `req.session.user` with no session middleware or guard in the case | `tests/fixtures/v4_release/cors_allowlist_session_guarded_safe.js` | credentialed CORS echoed only for an explicit allowlist (`Vary: Origin`). The session middleware (required secret, secure cookie) and a route guard (401 without a signed-in user) are in the case; the endpoint returns the caller's own display preferences |
 | RV-20 | `redirect_local_safe.cs` | `Login` accepts credentials and, once its placeholder comment is stripped, verifies nothing | `tests/fixtures/v4_release/local_redirect_preferences_safe.cs` | `Url.IsLocalUrl` + `LocalRedirect` on a request-supplied return URL (language preference, allowlisted culture, antiforgery) |
 | RV-22 | `ssrf_allowlist_safe.py` | the resolved IP is not pinned (DNS rebinding, admitted by the fixture); the response body is unbounded | `tests/fixtures/v4_release/ssrf_allowlist_pinned_safe.py` | scheme and host allowlist plus a public-address check, enforced on the pinned connection; no redirects; size cap |
-| RV-24 | `path_traversal_safe.cs` | an "uploads" directory (user-supplied content) is served to unauthenticated callers (CWE-862) | `tests/fixtures/v4_release/public_document_download_nolinks_safe.cs` | `GetFullPath` containment with a trailing separator (published manuals). **New in revision 3:** no link or reparse point is followed on the file or on any directory below the base |
+| RV-24 | `path_traversal_safe.cs` | an "uploads" directory (user-supplied content) is served to unauthenticated callers (CWE-862) | `tests/fixtures/v4_release/public_document_download_nolinks_safe.cs` | `GetFullPath` containment with a trailing separator (published manuals). **New in revision 3:** no Windows reparse point is followed on the file or on any directory below the base. A junction is rejected (verified); symbolic-link rejection was not verified on this machine; a Linux mount point is not a reparse point. Hard links: see "Hard links" below |
 | RV-26 | `path_prefix_after_canonicalization_safe.cs` | links inside the base directory are left out of scope: an environment assumption the case does not show | `tests/fixtures/v4_release/path_prefix_canonicalized_nolinks_safe.cs` | the containment check on the canonicalized path with a trailing separator (the control-holds counterpart of the deceptive fixture), now with no link followed |
-| RV-28 | `file_upload_safe.py` | anonymous uploads, with no access control or quota in the case | `tests/fixtures/v4_release/file_upload_authenticated_safe.py` | size cap, magic-byte type check, generated name, storage outside served paths. The signed-in guard, the session cookie (SameSite=Strict) and a per-user quota are in the case |
+| RV-28 | `file_upload_safe.py` | anonymous uploads, with no access control or quota in the case | `tests/fixtures/v4_release/file_upload_authenticated_quota_atomic_safe.py` (revision 5) | size cap, magic-byte type check, generated name, storage outside served paths. The signed-in guard, the session cookie (SameSite=Strict) and a per-user quota are in the case. **New in revision 5:** the quota slot is reserved atomically (see "RV-28" below) |
 | RV-35 | `cross_file_sql_safe/` | an unauthenticated user search returns users' e-mail addresses (CWE-306/CWE-359) | `tests/fixtures/v4_release/cross_file_catalog_search_safe/` | a parameterized LIKE query reached across three files (public catalog fields, 50-row cap) |
-| RV-37 | `cross_file_path_traversal_safe/` | a "reports" directory is served to unauthenticated callers; its sensitivity is not established by the code | `tests/fixtures/v4_release/cross_file_public_manual_download_nolinks_safe/` | canonicalized containment reached across three files (published manuals). **New in revision 3:** no link or reparse point is followed |
+| RV-37 | `cross_file_path_traversal_safe/` | a "reports" directory is served to unauthenticated callers; its sensitivity is not established by the code | `tests/fixtures/v4_release/cross_file_public_manual_download_nolinks_safe/` | canonicalized containment reached across three files (published manuals). **New in revision 3:** no reparse point is followed. Hard links: see "Hard links" below |
 
 Every safe replacement row's expected result is **No confirmed finding**, with the same trap as its V3 row: a reviewer
 flags the pattern the V3 row names without checking whether the control holds.
@@ -95,9 +96,45 @@ exist, and an impact that depends on it is not CONFIRMED.
   - the upload file name `../../escaped.txt` is written outside the directory;
   - `/download?name=../../...` reads a file outside the directory.
 
-`tools/context_manifest/tests/test_release_corpus.py` checks all four manifests deterministically:
+## RV-28 (revision 5): an atomic per-user quota
+
+The revision-5 validation CONFIRMED a race condition (TOCTOU) in the revision-3 RV-28 fixture
+`tests/fixtures/v4_release/file_upload_authenticated_safe.py`: it counts the user's directory and writes the file
+afterwards, so concurrent requests can all pass the count. That file is kept unchanged as the **regression input**.
+It is no longer a corpus row.
+
+- **Replacement:** `tests/fixtures/v4_release/file_upload_authenticated_quota_atomic_safe.py`. Every other control of
+  the previous fixture is kept.
+- **The quota:** before anything is written, the request takes one of `MAX_FILES_PER_USER` numbered slot files with
+  `os.open(..., O_CREAT | O_EXCL)`.
+  - That is one atomic filesystem operation, so it holds across threads and across worker processes that use the
+    same `UPLOAD_ROOT` on a local filesystem.
+  - It is not a lock inside one process, and no protection across hosts is claimed.
+  - A failed write deletes only the file the request created and releases its slot.
+  - A worker that dies after reserving leaves its slot taken, so the quota errs towards refusing uploads.
+- **Checked by** `tools/context_manifest/tests/test_release_fixture_quota.py`. The fixture's own code runs against a
+  minimal stand-in for Flask, which the kit does not depend on. Interleavings are forced with barriers, not sleeps:
+  - the regression input stores 4 files under a quota of 1 when every request passes the count before any writes;
+  - the replacement stores exactly the quota: across threads, with every request forced to reserve at the same moment
+    (1 of 4, 3 of 8); and across 6 spawned processes started together behind one barrier (2 of 6);
+  - a failed write and a name collision each release the slot and leave no file of their own (and not someone
+    else's);
+  - removing `O_EXCL`, or the release on failure, makes these tests fail.
+
+## Hard links (RV-24, RV-26, RV-37)
+
+The reparse-point check in these three fixtures does not detect hard links. This was verified by a mechanism test: a
+hard link already inside the base directory is accepted by all three, and RV-24 was seen serving its outside content. None of the three cases has any write path into its base
+directory, so no attacker of the case can create one. The attack is **not established**, and the fixtures are
+unchanged.
+
+The per-case evidence, the prerequisites (write access to the base, the same filesystem, Linux
+`protected_hardlinks`) and what was not verified are in `work/v4-release/hard-link-threat-model.md`.
+
+`tools/context_manifest/tests/test_release_corpus.py` checks all five manifests deterministically:
 - the mapping of every unchanged row against the V3 table;
 - each current replacement fixture's tested property and visible controls;
 - that no safe replacement fixture exposes user or account data it does not need;
 - that RV-29's anchors exist in the V4-release fixture, and that the V3 fixture has no hosting code for the stored-XSS
-  finding to bind to.
+  finding to bind to;
+- that RV-28's replacement keeps the previous fixture's controls and reserves its quota with an exclusive create.
