@@ -86,7 +86,11 @@ Content containing embedded scripts (e.g. an uploaded .svg or .html
 
 Uploads stored under a directory the app serves statically (e.g.
     ASP.NET Core wwwroot/ via StaticFiles, Express static(), a
-    Flask/Django static root) with no content-type restriction
+    Flask/Django static root) where the uploader influences the
+    stored file's extension or served content type (no server-side
+    extension allowlist or forced extension; a check on the
+    client-supplied Content-Type does not count, see the first
+    item above)
     -> the uploaded file is reachable at its own static URL, so an
     uploaded .html/.svg renders on the app's origin: unrestricted upload
     -> stored XSS (CWE-434 + CWE-79). A Content-Disposition header set

@@ -210,7 +210,11 @@ Final findings
    records and apply their checks by hand, do not reuse any record, do
    not write the store; every candidate goes through full validation
    in step 7, and the review's notes say why. Occurrence identity and
-   path comparison are only defined by `tools/feedback_store/`'s code. **`[ADDED, per a round-1 independent review Minor]`**
+   path comparison are only defined by `tools/feedback_store/`'s code.
+   Likewise, if a `tools/feedback_store/` call raises (for example a
+   changed-files path it refuses), treat it as a degraded store: Evidence
+   Reuse is off for the rest of the run. Never retry with the offending
+   input filtered out or apply the checks by hand. **`[ADDED, per a round-1 independent review Minor]`**
    When the store is reported degraded, do NOT write to
    `.security/feedback.json` this run — do not "auto-heal" by writing
    a fresh/empty store back over it, which would silently destroy

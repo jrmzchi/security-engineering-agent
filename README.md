@@ -365,7 +365,8 @@ clean scan.
   the form `(*T).Method` (Go pointer receiver) or `(anonymous
   namespace)::f` (C++) is refused as unqualified, so such records cannot be
   created (reuse simply does not happen); a path containing a Unicode
-  format character is refused; a writer holding the store's lock longer
+  format character is refused, and a diff that touches such a file turns
+  Evidence Reuse off for that run; a writer holding the store's lock longer
   than 30 seconds can be treated as crashed.
 - The enterprise identity guidance has not been exercised against a live
   directory or identity provider.

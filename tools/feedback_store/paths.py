@@ -90,11 +90,15 @@ def normalize(raw: str) -> str:
     # a different file. Rejection is the fail-closed direction: a record
     # cannot be created with such a path, a store holding one degrades
     # whole on load, and a changed-files list containing one makes the
-    # reuse check raise instead of treating the file as unchanged.
+    # reuse check raise instead of treating the file as unchanged --
+    # and since every check (c) / direct-staleness call then raises,
+    # Evidence Reuse is off for that whole run (skills/security-review
+    # step 2), whether or not a record depends on that file.
     # Checked here so normalize/validate/canonical all agree. Cost,
     # accepted: a repository whose real file names contain Cf characters
     # (rare in source trees; emoji ZWJ sequences are the realistic case)
-    # gets no Evidence Reuse for those files.
+    # gets no Evidence Reuse for those files, and none at all in a run
+    # whose diff touches one.
     for p in parts:
         if not p.strip():
             raise InvalidPathError(f"path contains a whitespace-only segment: {raw!r}")

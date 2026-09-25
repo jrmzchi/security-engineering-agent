@@ -113,7 +113,12 @@ def _break_stale_lock(lock_path: str) -> Optional[bool]:
     RE-CHECKED under that marker: a lock that has since been re-created
     (fresh mtime) is left alone. Every other writer only ever creates
     the lock with `O_EXCL`, so between the re-check and the removal no
-    one but the marker holder can replace the stale file.
+    one but the marker holder can replace the stale file -- provided
+    the stale lock's owner is really gone. An owner that is only
+    paused for longer than LOCK_STALE_SECONDS can still release it in
+    that window, and a third writer can then create a lock that this
+    removal deletes: that is the disclosed "a lock older than the
+    threshold is treated as abandoned" heuristic, not a waiter race.
 
     Returns True if the stale lock was removed, False if it is gone or
     no longer stale (retry the ordinary acquisition), None if it could

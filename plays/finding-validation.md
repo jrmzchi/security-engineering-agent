@@ -206,25 +206,30 @@ data" links then depend on callers the review cannot see. Resolve it
 this way, every time, so the same code never gets different statuses:
 
 ```text
-The method is callable from outside its own file (public/exported, or
-internal to an assembly/package the review does not fully cover), and a
-parameter reaches the sink with no sanitization, validation or
-parameterization in between
+The method can be called from code the review does not see (it is
+public/exported, or internal to an assembly/package the review does not
+fully cover), and a parameter reaches the sink with no sanitization,
+validation or parameterization in between
     -> treat that parameter as attacker-controlled: the method's own
        signature is the trust boundary, because nothing in scope
-       constrains what a caller passes
+       constrains what the unseen callers pass
     -> if the sink's unsafe behavior is itself shown from the code
        (e.g. the value is concatenated into raw SQL), the result is
        CONFIRMED; state in the finding's evidence that attacker control
        rests on this rule (callers outside the review scope)
-    -> assign severity from the severity model as usual; the unseen
-       callers may be one reason to lower it, never a reason by
-       themselves to use NEEDS_VERIFICATION
+    -> this holds even when some callers ARE in scope and pass safe
+       values, and even in a full-repository review that finds no
+       caller at all: an in-scope caller can only add findings (trace
+       it as usual), it never makes the candidate REJECTED on its own,
+       because the unseen callers remain
+    -> assign severity from the severity model as usual; unseen or
+       absent callers may be a reason to lower it (say so), never a
+       reason by themselves to use NEEDS_VERIFICATION
 
-An in-scope caller exists
-    -> trace the real callers instead; this rule does not apply, and a
-       caller that provably constrains the value can still make the
-       candidate REJECTED
+Every possible caller is in scope (the method is private/file-local, or
+internal to a unit the review fully covers)
+    -> this rule does not apply: trace those callers, and callers that
+       provably constrain the value make the candidate REJECTED
 ```
 
 `NEEDS_VERIFICATION` remains the answer when a required fact about the
@@ -297,8 +302,10 @@ and keep the main findings summary focused on what survived validation.
 
 **Evidence Reuse runs only through `tools/feedback_store/`.** Without a
 working Python 3 interpreter (see `skills/security-review` step 1's
-fallback), no record is reused and none is written: every candidate goes
-through this play's procedure in full. `[V4 release]`
+fallback), or when a call into it raises, no record is reused and none is
+written for the rest of the run: every candidate goes through this play's
+procedure in full (never retry with the offending input removed).
+`[V4 release]`
 
 **Cached results are never treated as permanently correct.** Before
 this play's own procedure re-derives a REJECTED conclusion from
