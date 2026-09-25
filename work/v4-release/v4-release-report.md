@@ -1,9 +1,20 @@
 # V4 release completion report (2026-09-25)
 
-**Terminal status: `V4_RELEASE_NOT_READY`.** Every functional test, validation corpus and fallback check passed on the
-final head, but the one fix-only re-review left **one open Major** (and one Minor) introduced by the review fix cycle
-itself. Under the pre-registered terminal rule an open Blocker/Major after the fix-only re-review closes the phase as
-not ready; no further fix or review round was started, and the branch was **not pushed**.
+**Terminal status after the separately authorized fix cycle 2: `V4_RELEASE_NOT_READY` (not pushed).**
+
+- **Review gate: passed.** The first cycle's open Major (out-of-scope-caller rule) and Minor (STALE write blocked
+  by a raising store call) were fixed. Cycle 2's one review found no Blocker/Major; its findings were fixed once; the
+  fix-only re-review adopted the change with one open Nit.
+- **Functional gate: failed on the final head `644d419`.** V3 corpus 38/39, enterprise identity 13/13, caller-scope set
+  3/3. The failing row is the safe case `hardcoded_secret_example_value.py`, graded CONFIRMED. In the same answer the
+  runner shifted its entries by one case: it reported `case_06_before`'s SQL injection under `case_07`, `case_07`'s
+  hardcoded AWS key and database URL under `case_08` (the documentation-example file, which contains neither), and gave
+  the example file no entry of its own. So the kit was not shown to confirm the example keys, but the run's per-case
+  answers are wrong. Under the pre-registered grading the row fails, and two expected findings were lost (the
+  hardcoded-secret finding under its own case; the upload-into-static-root stored-XSS finding, reported only as path
+  traversal). Nothing was regraded and no slot was re-run (re-runs were pre-registered for invalid runs only).
+
+Section 9 has the cycle-2 details. Sections 1–8 are the first release attempt, unchanged.
 
 This is a separate release-completion phase, not Batch 8. Batch 5 `CLOSED`, Batch 6 `COMPLETE_INCONCLUSIVE` and
 Batch 7 `COMPLETE_NO_GO` are unchanged and are not reinterpreted here.
@@ -123,3 +134,92 @@ A separately authorized fix cycle would need to:
 - rerun one review and the corpus.
 
 Only then could the branch be pushed.
+
+## 9. Fix cycle 2 (separately authorized, 2026-09-25)
+
+**Fixes.**
+
+- `4b1cb17`, out-of-scope-caller rule, split by vulnerability class:
+  - Injection presumption: kept only for an exhaustive injection list, and only when the parameter flows into a sink
+    whose unsafe behaviour is evidenced at the sink.
+  - Authorization: never CONFIRMED from "public" or "unseen caller". Every in-scope path is traced; object-level
+    authorization needs an ownership or tenant check (a role check alone does not satisfy it). An undecidable caller or
+    control gives NEEDS_VERIFICATION.
+  - Any class: an unsafe in-scope path is never erased by unseen or safe callers.
+- `4b1cb17`, new caller-scope set: `tests/fixtures/caller_scope/`, 3 cases, its own figure outside the 39-row corpus.
+- `4b1cb17`, `store.invalidate_contradicted()`:
+  - marks a contradicted record STALE with the locked, atomic write, or quarantines the store;
+  - a quarantined store loads as degraded and nothing is reused until `store.recover_quarantine()` verifies the
+    record;
+  - if the quarantine marker cannot be written either, it raises.
+- `644d419`: the marker has its own lock (both races the reviewer reproduced are now tested), plus
+  `store.load_for_invalidation()` for quarantined runs, the injection list marked exhaustive, and wording fixes.
+
+**Required cases.**
+
+| Required case | Covered by |
+|---|---|
+| 1, 2 | V3 `cross_file_object_authz_safe/` / `_unsafe/` |
+| 3 | `ef_fromsqlraw_vs_interpolated.cs` + `sqli_public_method_safe_in_scope_caller/` |
+| 4 | `authz_callerless_repository_unverified.cs` |
+| 5 | `authz_unsafe_in_scope_path/` |
+
+On the final head:
+- all authorization cases are correct: `idor`, both `cross_file_object_authz` cases, CS 1 NOT_CONFIRMED, CS 2
+  CONFIRMED;
+- CS 3 and `ef-unsafe` are CONFIRMED.
+
+**Tests.**
+
+| Suite | Result |
+|---|---|
+| `context_manifest` | 235 OK |
+| `feedback_store` (verbose) | 354 OK, 2 skipped |
+| New tests against the pre-fix code | fail |
+| Race tests with the marker lock stubbed out | fail |
+
+**Other checks.**
+
+- Consistency: PS 5.1, PS 7 and Bash on Windows give 23 hits each, twice; without Python all three exit 2. The Bash
+  run on Windows is not a macOS validation.
+- Fallbacks: no key → built-in; malformed and non-JSON output → built-in; a secret-shaped field is never sent; a real
+  HTTP 401 → `invalid_token` → built-in.
+- Feedback records: fresh, stale, malformed and ambiguous cases all behave as before.
+
+**Review.**
+
+- One review of `c3782a3..4b1cb17`: 0 Blocker/Major, 3 Minor, 2 Nit, 2 notes; all fixed in `644d419`.
+- Fix-only re-review: adopted.
+- Open Nit (not fixed; no further cycle): `load_for_invalidation()` reports `quarantined=False` on a quarantined store,
+  so a caller that ignores its docstring could misread the flag. `load()`, the only entry point for reuse, is
+  unaffected.
+
+**Corpus of record on `644d419`.**
+
+- 18 of 18 model runs valid.
+- 2 result-tool calls rejected and corrected by the runner.
+- V3 38/39 (the failing row is described above), enterprise identity 13/13, caller-scope 3/3.
+- Single run per group.
+- The final head is unchanged, so the earlier heads' passes (`fa3dfa4` 39/39, `67908c0` 39/39) are context only; they
+  do not validate `644d419`.
+
+**Jev.** 7 of 8 calls in this phase.
+
+- Cycle-2 case selection: Jev raised scrutiny on two cases, and both were added as tests; it also exposed the
+  role-versus-ownership wording gap.
+- One real rejected-key fallback check.
+- No gate was waived or lowered.
+
+**Accepted limitations added.**
+
+- A store that cannot be parsed cannot name a contradicted record; the review's notes carry the finding and whoever
+  repairs the store must re-validate it.
+- A leftover marker lock makes a doubly failing invalidation raise, which is loud.
+- XSS, SSRF and open redirect get no unseen-caller presumption (a result of the narrow class rule).
+- The open Nit above.
+
+**Next.** A release needs a pre-registered replication protocol for the corpus. Two examples:
+- repeated runs, with every run required to pass;
+- a per-case consistency check that rejects answers whose evidence cites another case's file.
+
+It then needs a fresh final validation on this head. That is a separate decision.
