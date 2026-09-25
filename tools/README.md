@@ -176,7 +176,7 @@ under review) depends on executable code beyond
 named in `work/v4-planning/context-manifest-schema.md` and
 `work/v4-planning/v4-design.md`: the DEEP domain-applicability
 algorithm (`domains.py`, section 3a), the Group 3 Scope coverage check
-(`scope_coverage.py`, `implementation-batches.md` Batch 0 criterion 7),
+(`scope_coverage.py`, the Group 3 Scope coverage check),
 the manifest schema/validator (`schema.py`/`validator.py`), the merged
 `computeReviewBudget` entry point (`budget.py`), and the built-in
 manifest producer (`producer.py`).
@@ -242,6 +242,9 @@ redaction.py   [V4 Batch 2] outbound request gate (keys and values,
 scope_coverage.py / cli.py   criterion 7's coverage check (see above)
 ```
 
+**Jev is optional and experimental**: it has no demonstrated benefit, and
+every review is complete without it.
+
 **Jev / TypeSafe credential (V4 Batch 2)**: the orchestrator reads the
 `TYPESAFE_API_KEY` environment variable and nothing else (no file, no
 config, no prompt). **Absent or blank is a fully supported, normal
@@ -269,6 +272,10 @@ resolve; `python -m unittest tools.context_manifest.tests.test_domains`
 also works directly.
 
 ## Feedback store runtime (V4 Batch 1)
+
+**Evidence Reuse is experimental**: it has no demonstrated benefit, and a
+review never depends on it (a missing, corrupted or ineligible store only
+means full validation).
 
 `tools/feedback_store/` is a second, standard-library-only Python 3
 package, deliberately separate from `tools/context_manifest/` (it has
@@ -340,6 +347,17 @@ existing `tests/fixtures/cross_file_object_authz_safe/` and
 ones), a negative control proving a Feedback record cannot suppress
 scanner execution or candidate generation by construction, four
 root-cause-layer fixtures, and an explicit mutation suite.
+
+## Planning references in comments
+
+Docstrings and comments in `tools/context_manifest/` and
+`tools/feedback_store/` (and their tests) sometimes cite V4 planning
+records by name -- `implementation-batches.md`, `measurement-plan.md`,
+the batch verification logs, and review-round labels. Those records
+are not part of this release; they explain where a rule came from and
+never define current behaviour. The two design specifications the code
+is built from, `work/v4-planning/context-manifest-schema.md` and
+`work/v4-planning/v4-design.md`, are included.
 
 ## Adding a tool later
 

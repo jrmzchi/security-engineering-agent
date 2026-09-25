@@ -1,7 +1,7 @@
 """Jev (TypeSafe System One) HTTP client -- transport ONLY. V4 Batch 2.
 
-Contract source (verified 2026-09-23 against the official docs, read-only;
-see work/v4-planning/batch2-verification-log.md "API contract"):
+Contract source (verified 2026-09-23 against the official TypeSafe API
+docs, read-only):
   POST {base_url}/v1/systemone           Authorization: Bearer <key>
   body: {"state": <str|object|array>, "model": "jev-latest", "questions": {...}}
   200:  {"model": str, "answers": {<id>: <answer>}, "usage": {"input_tokens", "output_tokens"}}

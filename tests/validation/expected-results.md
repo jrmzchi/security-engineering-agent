@@ -98,9 +98,7 @@ CONFIRMED case):                        1  (remediation_fake_fix_after_still_vul
 
 `tests/fixtures/enterprise_identity/` is not part of this file's corpus. It
 belongs to the V4 Batch 4 capability (`plays/enterprise-identity-security.md`),
-its results are reported as their own Recall figure
-(`work/v4-planning/measurement-plan.md` section 2), and its expected outcomes
+its results are reported as their own Recall figure, and its expected outcomes
 live in `tests/validation/v4-enterprise-identity-expected-results.md`, kept
 out of this table on purpose. Consumers that read this table as the V3 corpus
-(for example `tools/batch25_measurement/recall_groups.py`) are therefore
-unaffected.
+are therefore unaffected.

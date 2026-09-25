@@ -279,5 +279,4 @@ Check 5 of the first version (safe/unsafe fixtures and controlled tests
 distinguish the cases above) is this play's own validation obligation:
 `tests/validation/v4-enterprise-identity-test-cases.md` and the
 `tests/fixtures/enterprise_identity/` fixtures. Their results are reported as
-their own Recall figure, separate from the V3 fixture corpus
-(`work/v4-planning/measurement-plan.md` section 2).
+their own Recall figure, separate from the V3 fixture corpus.

@@ -23,7 +23,7 @@ assertions of every case are also executed automatically by
 `tools/context_manifest/tests/test_batch3_review_budget.py` (which fails if a
 case in the `| N |` or `### Case N:` format is added or removed here without
 updating it); the prose-only
-guarantees are re-traced in `work/v4-planning/batch3-verification-log.md`.
+guarantees are traced by hand against the plays.
 
 ## Level computation (TARGETED path, ordinary development changes)
 

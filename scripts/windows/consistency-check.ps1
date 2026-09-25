@@ -195,8 +195,8 @@ foreach ($d in @('output\scans', 'output\reports')) {
 }
 
 # --- SCOPE_COVERAGE: Group 3 play Scope vs. tools/context_manifest's ------
-# rule table, both directions (implementation-batches.md Batch 0
-# criterion 7). Unlike every category above, a SCOPE_COVERAGE hit is a
+# rule table, both directions (the V4 Group 3 Scope coverage
+# check). Unlike every category above, a SCOPE_COVERAGE hit is a
 # confirmed defect requiring a code change, not a judgment call -- see
 # plays/repository-consistency.md's SCOPE_COVERAGE entry. This script
 # delegates to the single shared Python implementation in

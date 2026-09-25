@@ -2,7 +2,7 @@
 
 One row per fixture in `tests/fixtures/enterprise_identity/` (V4 Batch 4,
 `plays/enterprise-identity-security.md`). This set is reported as **its own
-Recall figure** (`work/v4-planning/measurement-plan.md` section 2). It is
+Recall figure**. It is
 **not** part of `tests/validation/expected-results.md` (the V3 corpus), its
 "Summary counts", or a V3 corpus pass. Run a pass the way
 `tests/validation/README.md` describes, stripping each fixture's header

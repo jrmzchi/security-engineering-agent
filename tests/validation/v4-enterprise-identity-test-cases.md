@@ -15,7 +15,7 @@ does not judge findings. **Nothing here was validated against a live AD,
 Entra ID, ADFS or Kerberos environment**; none was connected.
 
 Results for this set are a **separate Recall figure**, never blended into the
-V3 corpus figures (`work/v4-planning/measurement-plan.md` section 2). Expected
+V3 corpus figures. Expected
 outcomes are in `tests/validation/v4-enterprise-identity-expected-results.md`.
 
 ## A. Fixture pairs, one per first-version check

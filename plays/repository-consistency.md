@@ -49,8 +49,7 @@ HYGIENE            an accidentally-tracked generated artifact
                    (__pycache__, *.pyc, unexpected output/scans or
                    output/reports content, temp files) not covered by
                    .gitignore
-SCOPE_COVERAGE     [ADDED, per implementation-batches.md Batch 0
-                   criterion 7] a Group 3 play's ("web-security" /
+SCOPE_COVERAGE     [ADDED in V4] a Group 3 play's ("web-security" /
                    "api-security" / "data-security" / "file-security")
                    live "## Scope" section and
                    tools/context_manifest/domains.py's per-item rule

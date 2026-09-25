@@ -1,5 +1,15 @@
 # Context Manifest & Adaptive Project Security Intelligence — Data Contracts
 
+> **V4 release note.** This document is kept as the design specification
+> that `tools/context_manifest/` and `tools/feedback_store/` cite by section
+> number. The "Status" paragraph below is historical: the design was
+> implemented in V4 (see `README.md`'s "V4 components" for what ships and
+> what is experimental). Statements here about token, cost or efficiency
+> benefits are design hypotheses, not release claims; none was
+> demonstrated. Other planning records it names (`implementation-batches.md`,
+> `measurement-plan.md`, review-round dispositions and verification logs)
+> are not part of this release.
+
 **Status: design proposal, not implemented. Revised across three
 rounds of independent review, plus nine direct correction batches: the
 first added section 3a (DEEP domain applicability) and applied
