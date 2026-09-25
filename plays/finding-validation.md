@@ -199,44 +199,79 @@ exposure and blast radius (see the severity model above) to secrets,
 dependency, and configuration findings.
 
 **Rule — a sink whose callers are outside the review scope.** `[V4
-release]` A vulnerable operation often sits in a method that nothing in
-the reviewed files calls: a repository, data-access or library method
-whose own parameters reach the sink. The "Entry point" and "Controlled
-data" links then depend on callers the review cannot see. Resolve it
-this way, every time, so the same code never gets different statuses:
+release]` A vulnerable-looking operation often sits in a method that
+nothing in the reviewed files calls, or that callers outside the review
+could also reach: a repository, data-access or library method whose own
+parameters reach the sink. The "Entry point" and "Controlled data"
+links then depend on callers the review cannot see. What those unseen
+callers may be assumed to do is decided by the **vulnerability class and
+the evidence at the sink** — never by the method being public alone.
+Resolve it this way, every time, so the same code never gets different
+statuses:
 
 ```text
-The method can be called from code the review does not see (it is
-public/exported, or internal to an assembly/package the review does not
-fully cover), and a parameter reaches the sink with no sanitization,
-validation or parameterization in between
-    -> treat that parameter as attacker-controlled: the method's own
-       signature is the trust boundary, because nothing in scope
-       constrains what the unseen callers pass
-    -> if the sink's unsafe behavior is itself shown from the code
-       (e.g. the value is concatenated into raw SQL), the result is
-       CONFIRMED; state in the finding's evidence that attacker control
-       rests on this rule (callers outside the review scope)
-    -> this holds even when some callers ARE in scope and pass safe
-       values, and even in a full-repository review that finds no
-       caller at all: an in-scope caller can only add findings (trace
-       it as usual), it never makes the candidate REJECTED on its own,
-       because the unseen callers remain
-    -> assign severity from the severity model as usual; unseen or
-       absent callers may be a reason to lower it (say so), never a
-       reason by themselves to use NEEDS_VERIFICATION
+Injection-class sink -- the defect is a property of the sink code itself
+(SQL/NoSQL/LDAP/OS-command/expression injection; path traversal into a
+filesystem call; unsafe deserialization). The presumption below applies
+ONLY when ALL three are shown directly from the code:
+  - the method can be called from code the review does not see
+    (public/exported, or internal to a unit the review does not fully
+    cover);
+  - a named parameter flows into the sink with nothing in between that
+    sanitizes, validates, encodes, contains or parameterizes it;
+  - the unsafe behavior is evidenced AT the sink (e.g. the value is
+    concatenated into raw SQL text), not inferred from a name or type.
+    -> treat that parameter as attacker-controlled: result CONFIRMED;
+       state in the finding's evidence that attacker control rests on
+       this rule (callers outside the review scope)
+    -> an in-scope caller that happens to pass a safe value does not
+       make it REJECTED: the method itself stays unsafe for the callers
+       the review cannot see
+    -> severity from the severity model as usual; unseen or absent
+       callers may lower it (say so)
+    -> if any of the three cannot be shown, the presumption does not
+       apply: trace normally (NEEDS_VERIFICATION if a required fact is
+       missing)
 
-Every possible caller is in scope (the method is private/file-local, or
-internal to a unit the review fully covers)
-    -> this rule does not apply: trace those callers, and callers that
-       provably constrain the value make the candidate REJECTED
+Authorization-class sink (object-level / BOLA / IDOR, function-level,
+tenant isolation) -- the control is normally, and correctly, placed in
+a caller or a policy layer, so a public data-access method without its
+own ownership or role filter is NOT evidence of a missing control
+    -> never CONFIRMED because the method is public or because a caller
+       is unseen; no presumption applies
+    -> trace every in-scope path that reaches the object and the check
+       that class requires on it -- object-level: an ownership or
+       tenant check on THIS object (a role check or authentication
+       alone does not satisfy it); function-level: a role or policy
+       check: a path that reaches the object with no such check is
+       CONFIRMED on that path's own evidence; if every in-scope path
+       enforces the check, REJECTED for those paths
+    -> if the caller or the control that would decide it cannot be
+       established from the reviewed code (e.g. there is no in-scope
+       caller at all), NEEDS_VERIFICATION, naming the missing caller or
+       control
+
+Every other class (XSS, SSRF, open redirect, CSRF, ...)
+    -> no presumption applies: trace normally; NEEDS_VERIFICATION if a
+       required caller fact cannot be established
+
+Any class
+    -> unseen callers, or other safe callers, never erase the evidence of
+       a separately unsafe in-scope path: each in-scope path is judged on
+       its own evidence, and one unsafe path is enough to CONFIRM
+    -> when every possible caller is in scope (private/file-local, or a
+       unit the review fully covers) there are no unseen callers: trace
+       them; callers that provably constrain the value make it REJECTED
 ```
 
-`NEEDS_VERIFICATION` remains the answer when a required fact about the
-sink, or about a control inside the reviewed code, cannot be
-established — not merely because the callers are out of scope. This rule
-is a defined reading of the "Entry point" link above, like the
-exposure-type exception; it does not relax the chain for anything else.
+`NEEDS_VERIFICATION` is the answer when a required fact about the sink,
+or about a caller or control inside the reviewed code, cannot be
+established. Unseen callers alone never make an injection-class sink
+NEEDS_VERIFICATION (the presumption above covers them) and never make an
+authorization-class sink CONFIRMED (only an evidenced unprotected path
+does). This rule is a defined reading of the "Entry point" link above,
+like the exposure-type exception; it does not relax the chain for
+anything else.
 
 ## Baseline origin
 
@@ -303,8 +338,11 @@ and keep the main findings summary focused on what survived validation.
 **Evidence Reuse runs only through `tools/feedback_store/`.** Without a
 working Python 3 interpreter (see `skills/security-review` step 1's
 fallback), or when a call into it raises, no record is reused and none is
-written for the rest of the run: every candidate goes through this play's
-procedure in full (never retry with the offending input removed).
+written for the rest of the run, except that a record this run's
+validation contradicts is still invalidated (step 6): every candidate goes
+through this play's procedure in full (never retry with the offending
+input removed). Without Python that invalidation cannot run: say so in the
+review's notes, naming the record.
 `[V4 release]`
 
 **Cached results are never treated as permanently correct.** Before
@@ -433,7 +471,12 @@ that schema.
      reusable status (marked STALE with the reason "re-validation
      resolved differently"), preserving the history of what it used
      to say rather than erasing it, but never again treated as a
-     cached "safe" conclusion.
+     cached "safe" conclusion. `[V4 release]` Do this with
+     `store.invalidate_contradicted()`, also in a run whose Evidence
+     Reuse is off: it persists the STALE mark atomically or, if it
+     cannot, quarantines the store so no record is reused until
+     `store.recover_quarantine()` verifies the mark; a raise means the
+     store is unusable for reuse (see `skills/security-review` step 2).
 ```
 
 **This mechanism's job is to never wrongly exempt a genuinely

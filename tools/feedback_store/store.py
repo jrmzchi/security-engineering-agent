@@ -305,6 +305,11 @@ class LoadResult:
     # tag, so it can never go stale the way relying on the tag alone
     # did (see the round of testing that found and fixed this).
     has_legacy_records: bool = False
+    # [ADDED, V4 release] True iff the store is quarantined (see
+    # `invalidate_contradicted`): a record that a fresh validation
+    # contradicted could not be durably marked STALE, so NO record may be
+    # reused until `recover_quarantine()` verifies every listed record.
+    quarantined: bool = False
 
 
 def empty_store() -> dict:
@@ -351,7 +356,34 @@ def _resolve_safe(path: str, repo_root: str) -> str:
     return real_path
 
 
+def _quarantine_path_for(path: str) -> str:
+    return path + ".quarantine"
+
+
 def load(path: str, *, repo_root: str) -> LoadResult:
+    """Load `.security/feedback.json` (see the module docstring for the
+    degradation policy). A quarantined store (`<path>.quarantine`
+    present, see `invalidate_contradicted`) always loads as degraded,
+    whatever the store file itself contains -- a quarantine is only ever
+    lifted by `recover_quarantine()`."""
+    _resolve_safe(path, repo_root)
+    quarantine = _quarantine_path_for(path)
+    _resolve_safe(quarantine, repo_root)
+    if os.path.lexists(quarantine):
+        return LoadResult(
+            store=None, ok=False, degraded=True, quarantined=True,
+            reason=(
+                f"quarantined ({quarantine!r} is present): a record contradicted by a fresh validation could not "
+                "be durably marked STALE, so no record may be reused. Mark the listed records STALE "
+                "(invalidate_contradicted) and then call recover_quarantine(), which verifies them first."
+            ),
+        )
+    return _load_unchecked(path, repo_root=repo_root)
+
+
+def _load_unchecked(path: str, *, repo_root: str) -> LoadResult:
+    """`load()` without the quarantine check -- for the invalidation and
+    recovery paths only, which must be able to read a quarantined store."""
     # [CORRECTED, per a round-2 independent review Minor: the previous
     # order returned "no file, empty store" before ever calling
     # `_resolve_safe` -- a `.security` directory that is ITSELF a
@@ -687,6 +719,158 @@ def mark_stale(store: dict, record_id: str, *, reason: str) -> None:
         candidate["staleReason"] = reason
 
     _mutate_rejection_record_atomically(store, record_id, _mutate)
+
+
+CONTRADICTED_REASON = "re-validation resolved differently"
+INVALIDATION_ATTEMPTS = 3
+
+
+@dataclass
+class InvalidationResult:
+    """Outcome of `invalidate_contradicted`. `durable` is True only when
+    every named record is, on disk, either STALE or absent. When it is
+    False the store is quarantined (`quarantined` True) and loads as
+    degraded until `recover_quarantine()` succeeds."""
+
+    durable: bool
+    marked: list
+    already_stale: list
+    missing: list
+    quarantined: bool = False
+    detail: Optional[str] = None
+
+
+def invalidate_contradicted(path: str, *, repo_root: str, record_ids, git_commit: Optional[str],
+                            reason: str = CONTRADICTED_REASON) -> InvalidationResult:
+    """[ADDED, V4 release] Durably take away the reusable status of
+    REJECTED records that a fresh full validation just contradicted
+    (plays/finding-validation.md step 6: CONFIRMED or NEEDS_VERIFICATION
+    where a record for the same occurrence said REJECTED).
+
+    This is the ONE write permitted even in a run whose Evidence Reuse is
+    off because a store call raised: a contradicted record must never stay
+    eligible merely because the ordinary path failed. It re-reads the store
+    itself (quarantined or not), marks each named record STALE through the
+    usual validated mutator, and persists it with the usual locked, atomic,
+    hash-checked `write()` (a concurrent change is re-read and retried, up
+    to INVALIDATION_ATTEMPTS times). It never rewrites a store it cannot
+    parse.
+
+    If the STALE marks cannot be made durable for ANY reason (unreadable
+    store, lock timeout, repeated concurrent change, I/O or validation
+    failure, an unusable `reason`), the store is QUARANTINED instead:
+    `<path>.quarantine` lists the record ids, and every later `load()`
+    reports the store degraded, so no record is reused until
+    `recover_quarantine()` has verified each listed record is STALE or
+    absent. The result then says `durable=False, quarantined=True` -- it
+    never reports a failed invalidation as done. If even the quarantine
+    cannot be written, `StoreError` is raised: the caller must then treat
+    the store as unusable for reuse and say so in the review's notes."""
+    if isinstance(record_ids, (str, bytes)):
+        raise TypeError(f"record_ids must be a list of ids, not a bare {type(record_ids).__name__}")
+    ids = list(dict.fromkeys(record_ids))
+    if not ids or not all(isinstance(r, str) and r for r in ids):
+        raise TypeError(f"record_ids must be a non-empty list of non-empty strings, got {record_ids!r}")
+    failure: Optional[BaseException] = None
+    for _ in range(INVALIDATION_ATTEMPTS):
+        try:
+            loaded = _load_unchecked(path, repo_root=repo_root)
+            if not loaded.ok:
+                raise StoreError(f"the store cannot be read ({loaded.reason})")
+            store = loaded.store
+            marked, already, missing = [], [], []
+            for rid in ids:
+                rec = store["rejectionRecords"].get(rid)
+                if rec is None:
+                    missing.append(rid)
+                elif rec.get("status") == schema.STATUS_STALE:
+                    already.append(rid)
+                else:
+                    mark_stale(store, rid, reason=reason)
+                    marked.append(rid)
+            if marked:
+                write(path, store, repo_root=repo_root, expected_on_disk_hash=loaded.on_disk_hash, git_commit=git_commit)
+            return InvalidationResult(durable=True, marked=marked, already_stale=already, missing=missing,
+                                      quarantined=os.path.lexists(_quarantine_path_for(path)))
+        except ConcurrentModificationError as exc:
+            failure = exc
+            continue
+        except (StoreError, schema.SchemaError, OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
+            failure = exc
+            break
+    detail = f"could not durably mark {ids!r} STALE: {type(failure).__name__}"
+    try:
+        _write_quarantine(path, repo_root=repo_root, record_ids=ids, detail=detail)
+    except (OSError, StoreError, ValueError) as exc:
+        raise StoreError(
+            f"{detail}, and the quarantine marker could not be written either ({type(exc).__name__}): "
+            "treat this store as unusable for Evidence Reuse until a human has marked these records STALE"
+        ) from exc
+    return InvalidationResult(durable=False, marked=[], already_stale=[], missing=[], quarantined=True, detail=detail)
+
+
+def _write_quarantine(path: str, *, repo_root: str, record_ids, detail: str) -> None:
+    """Create or extend `<path>.quarantine` atomically (temp file + replace).
+    Record ids already listed by an earlier quarantine are kept; an
+    existing marker that cannot be parsed is left untouched (it already
+    blocks reuse, and overwriting it could lose the ids it lists)."""
+    quarantine = _quarantine_path_for(path)
+    _resolve_safe(quarantine, repo_root)
+    ids = list(record_ids)
+    if os.path.lexists(quarantine):
+        try:
+            with open(quarantine, encoding="utf-8") as fh:
+                previous = json.load(fh)["recordIds"]
+            if not isinstance(previous, list):
+                raise ValueError("recordIds is not a list")
+        except (OSError, ValueError, KeyError, TypeError):
+            return
+        ids = list(dict.fromkeys([*previous, *ids]))
+    payload = (json.dumps({"schemaVersion": 1, "recordIds": ids, "detail": detail,
+                           "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, indent=2) + "\n").encode("utf-8")
+    directory = os.path.dirname(os.path.abspath(quarantine)) or "."
+    os.makedirs(directory, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".feedback.quarantine.", suffix=".tmp", dir=directory)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(payload)
+            fh.flush()
+            os.fsync(fh.fileno())
+        _replace_with_retry(tmp, quarantine)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def recover_quarantine(path: str, *, repo_root: str) -> list:
+    """Lift a quarantine only after verifying, on disk, that every record
+    it lists is STALE or absent. Returns the verified ids ([] if the store
+    was not quarantined). Raises `StoreError` -- leaving the quarantine in
+    place -- when the marker or the store cannot be read, or when any
+    listed record is still reusable."""
+    quarantine = _quarantine_path_for(path)
+    _resolve_safe(quarantine, repo_root)
+    if not os.path.lexists(quarantine):
+        return []
+    try:
+        with open(quarantine, encoding="utf-8") as fh:
+            ids = json.load(fh)["recordIds"]
+        if not isinstance(ids, list) or not all(isinstance(r, str) for r in ids):
+            raise ValueError("recordIds is not a list of strings")
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise StoreError(f"the quarantine marker {quarantine!r} cannot be read ({type(exc).__name__}); inspect it by hand") from exc
+    loaded = _load_unchecked(path, repo_root=repo_root)
+    if not loaded.ok:
+        raise StoreError(f"the store still cannot be read ({loaded.reason}); the quarantine stays")
+    active = [rid for rid in ids if rid in loaded.store["rejectionRecords"]
+              and loaded.store["rejectionRecords"][rid].get("status") != schema.STATUS_STALE]
+    if active:
+        raise StoreError(f"record(s) {active!r} are still reusable; mark them STALE first; the quarantine stays")
+    os.remove(quarantine)
+    return ids
 
 
 def mark_revalidated(store: dict, record_id: str, new_record: dict) -> None:

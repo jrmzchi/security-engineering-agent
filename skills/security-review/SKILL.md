@@ -214,9 +214,22 @@ Final findings
    Likewise, if a `tools/feedback_store/` call raises (for example a
    changed-files path it refuses), treat it as a degraded store: Evidence
    Reuse is off for the rest of the run. Never retry with the offending
-   input filtered out or apply the checks by hand. **`[ADDED, per a round-1 independent review Minor]`**
+   input filtered out or apply the checks by hand. **Reuse being off
+   never excuses leaving a contradicted record reusable:** whenever full
+   validation resolves a candidate CONFIRMED or NEEDS_VERIFICATION where
+   a REJECTED record for the same occurrence exists
+   (`plays/finding-validation.md` step 6), call
+   `store.invalidate_contradicted()` — the one write allowed in a
+   degraded or raising run. It marks the record STALE durably, or, if
+   that cannot be guaranteed, quarantines the store (`load()` then
+   reports it degraded and nothing is reused until
+   `store.recover_quarantine()` has verified every listed record); if
+   it raises, the store must be treated as unusable for reuse, and the
+   review's notes say so. **`[ADDED, per a round-1 independent review Minor]`**
    When the store is reported degraded, do NOT write to
-   `.security/feedback.json` this run — do not "auto-heal" by writing
+   `.security/feedback.json` this run (the sole exception is
+   `store.invalidate_contradicted()` above, which never rewrites a store
+   it cannot parse) — do not "auto-heal" by writing
    a fresh/empty store back over it, which would silently destroy
    every other rejection and human-confirmed miss record the degraded
    load couldn't parse alongside the one bad record. Surface the
@@ -330,9 +343,10 @@ Security impact
 If any link in this chain cannot be demonstrated with evidence
 (file/line, or a concrete traced value), the finding is not HIGH/CRITICAL
 confidence — see the confidence model in `plays/finding-validation.md`.
-A sink whose callers are all outside the review scope is not a missing
-link: see that play's "Rule — a sink whose callers are outside the review
-scope".
+For a sink whose callers are outside the review scope, how the missing
+link is resolved depends on the vulnerability class (injection vs.
+authorization): see that play's "Rule — a sink whose callers are outside
+the review scope".
 
 ## Where to look next (progressive disclosure)
 

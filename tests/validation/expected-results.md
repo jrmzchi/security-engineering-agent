@@ -102,3 +102,10 @@ its results are reported as their own Recall figure, and its expected outcomes
 live in `tests/validation/v4-enterprise-identity-expected-results.md`, kept
 out of this table on purpose. Consumers that read this table as the V3 corpus
 are therefore unaffected.
+
+## V4 release: caller-scope cases (a separate figure)
+
+`tests/fixtures/caller_scope/` is not part of this file's corpus either. Its
+cases exercise `plays/finding-validation.md`'s out-of-scope-caller rule, and
+their expected outcomes live in
+`tests/validation/v4-caller-scope-expected-results.md`.

@@ -111,6 +111,11 @@ network connection, or a `TYPESAFE_API_KEY`.
   ambiguous means full validation. A record never changes which scanners
   run or which candidates are generated. A missing or corrupted store
   degrades reuse for that run only and is never overwritten automatically.
+  A record that a new validation contradicts is marked STALE even when
+  reuse is off for the run (`store.invalidate_contradicted()`); if that
+  cannot be persisted, the store is quarantined
+  (`.security/feedback.json.quarantine`) and nothing is reused until
+  `store.recover_quarantine()` has verified the record is STALE.
   Procedure: `plays/finding-validation.md`'s "Feedback Learning" sections;
   format: `templates/feedback-store.md`.
 - **Enterprise identity.** Loaded only when the play's "When this play

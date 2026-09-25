@@ -11,6 +11,13 @@ this file shows the same shape in its persisted JSON form, produced by
 `tools/feedback_store/schema.py`, never hand-assembled to a different
 shape.
 
+`[V4 release]` A sibling `.security/feedback.json.quarantine` file means a
+record that a fresh validation contradicted could not be durably marked
+STALE: while it exists the store loads as degraded and nothing is reused.
+It lists the record ids; only `tools/feedback_store/store.py`'s
+`recover_quarantine()` removes it, after checking each listed record is
+STALE or absent. Do not delete it by hand without that check.
+
 ```json
 {
   "schemaVersion": 2,

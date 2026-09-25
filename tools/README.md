@@ -294,7 +294,11 @@ schema.py       feedback_rejection / feedback_miss record shapes,
                 HIGH-confidence-trace-only creation gate, a disclosed
                 heuristic secret-detection backstop
 store.py        .security/feedback.json load/append/mark_stale/
-                mark_revalidated/write -- corruption/unknown-schema-
+                mark_revalidated/write, plus [V4 release]
+                invalidate_contradicted/recover_quarantine (a
+                contradicted record is made STALE durably, or the
+                store is quarantined until that is verified) --
+                corruption/unknown-schema-
                 version handling (degrades the WHOLE store, never
                 partially trusts a parseable fragment), an exclusive
                 lockfile serializing concurrent writers around an
