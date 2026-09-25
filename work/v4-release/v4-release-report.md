@@ -1,5 +1,26 @@
 # V4 release completion report (2026-09-25)
 
+**Final status after protocol revision 6 (collect-all): `V4_RELEASE_NOT_READY` (not pushed). Release gate NOT_MET:
+50 passed, 2 failed, 0 invalid, 0 not run.**
+
+- **Fixtures** (`17edea1`, corpus `v4-release-corpus/5`):
+  - RV-28 got an atomic per-user quota; the previous fixture is kept as the regression input.
+  - RV-24/26/37: their check does not detect hard links, but no attacker of those cases can create one. They are
+    unchanged, and the threat model is recorded.
+- **Review:** one independent review found one Major (in-run stops not recorded) and fixed it. The fix-only
+  re-review said READY.
+- **Validation** (`bc7abdc`): all 52 cases ran; no hard stop.
+  - **RV-15 FAILED** (expected safe): CONFIRMED LOW, express-session's default MemoryStore.
+    - Classification: pending, most likely a V4 review false positive.
+  - **RV-29 FAILED** (expected unsafe): both path traversals CONFIRMED, but stored XSS was **not reported at all**,
+    although the hosting code is now in the case.
+    - Classification: a V4 product recall miss.
+  - RV-28 (new fixture) passed. So did RV-24, RV-26 and RV-37 (hard links), and all 13 enterprise-identity cases.
+- **Product code** unchanged. Product tests, fallbacks, feedback-record checks, wrappers and the privacy scan all
+  hold.
+
+Section 15 has the details; sections 1–14 are the earlier attempts, unchanged.
+
 **Final status after the RV-29 correction and protocol revision 5: `V4_RELEASE_NOT_READY` (not pushed).**
 
 - **RV-29 correction** (`d67a81c`, corpus `v4-release-corpus/4`): a self-contained V4-release fixture whose hosting
@@ -554,3 +575,127 @@ Either would be followed by a new validation. None of it was started here.
   control.
 
 Either would be followed by a new validation. None of it was started here.
+
+## 15. RV-28 quota, hard links and the collect-all validation, protocol revision 6 (2026-09-26)
+
+**Starting state.**
+- `v4-release` HEAD `7b6212e`, clean working tree.
+- Local `v3-slim` and the golden-baseline tag at `f5502cd`, which is the release base.
+
+**Fixture defects versus product defects.** The revision-5 stop (RV-28) was a **fixture** defect: an expected-safe
+fixture whose quota was not atomic. It was not a V4 product defect.
+
+**RV-28 (fixture fix, `17edea1`).**
+- **New fixture:** `tests/fixtures/v4_release/file_upload_authenticated_quota_atomic_safe.py`. Every control of the
+  previous fixture is kept.
+- **The quota:** a slot file taken with `O_CREAT|O_EXCL` before anything is written. That is atomic across threads
+  and worker processes on the same local filesystem; no cross-host claim is made. A failed write deletes only its own
+  file and releases the slot.
+- **Regression input:** the previous fixture, unchanged.
+- **Tests:** `tools/context_manifest/tests/test_release_fixture_quota.py`, with barrier-forced interleavings and no
+  sleeps.
+  - The regression input stores 4 files under a quota of 1.
+  - The replacement stores exactly its quota across threads (1 of 4, 3 of 8) and across 6 spawned processes (2 of 6).
+  - A failed write and a name collision each release the slot.
+  - Mutants that remove `O_EXCL`, or the release on failure, are killed.
+  - A single-process `threading.Lock` mutant (checked by the reviewer) fails the process test 10 times out of 10.
+- **Flask:** it is not installed and installing packages was not authorised, so the fixture's own code runs against
+  a minimal Flask stand-in.
+- **Harness hygiene:** docstrings survive the harness's comment stripping, so the new fixture's docstrings were
+  turned into comments. Otherwise a claim such as "Atomically ..." would have reached the runner.
+
+**Hard links, RV-24/26/37 (investigated, fixtures unchanged).** Full record: `work/v4-release/hard-link-threat-model.md`.
+- **Mechanism test** (scratchpad, .NET 8, NTFS):
+  - a hard link already inside the base is accepted by all three helpers, and RV-24 served its outside content;
+  - a junction and `..` are rejected;
+  - a symbolic link could not be created here (no privilege), so symbolic-link rejection is **not verified**.
+- **Threat model:**
+  - none of the three cases has any write path into its base directory, so no attacker of the case can create a link;
+  - a hard link also needs the same filesystem, and on Linux `protected_hardlinks` limits linking to files the
+    linker can already read and write;
+  - the attack is **not established**. No protection was added or claimed for hard links, and the corpus document
+    no longer says "no link is followed" without qualification.
+- **Not verified:** Linux behaviour; Windows hard-link permission rules; symbolic links.
+
+**Harness finding (fixed before the run).**
+- Earlier validations did not list the other bases' records as forbidden roots, and the answer-material heuristic
+  did not catch that path.
+- A transcript scan of all 114 revision-4 and revision-5 runs found **no** read outside each run's own workspace and
+  the kit, so earlier results are unaffected.
+- Revision 6 forbids the whole session-scratchpad tree and makes any outside read a hard stop.
+
+**Protocol revision 6 (`bc7abdc`) and adapter.**
+- **Collect-all:**
+  - a valid-but-wrong answer is `FAILED`, never rerun, and the run continues;
+  - technical failures keep the one-retry limit (`NOT_OBTAINED` if still invalid, and the run continues);
+  - any non-pass makes the gate `NOT_MET`.
+- **Hard stops,** written into the run state and never resumed:
+  - isolation, including any outside read and a cwd or add-dir mismatch;
+  - pin mismatch;
+  - evidence binding;
+  - a credential in the adapter environment;
+  - record integrity;
+  - an interrupted attempt;
+  - any unknown class.
+- **Adapter tests:** 46 synthetic tests. Mutants are killed for the continue-on-fail driver, the hard-stop split, the
+  resume guard, the isolation roots, the gate, `_finish`, the isolation join and the in-run kit stop.
+- **Grading:** unchanged from revision 5.
+
+**Review.**
+- **One independent review:**
+  - Major, fixed: stops inside a run exited without being recorded, so a stopped run could have been resumed with the
+    gate reading MET.
+  - Minor/Nit, fixed: the attempt-level test, the docstring and wording.
+  - Doubts, settled towards stopping: outside reads, and cwd/add-dir mismatches.
+- **Fix-only re-review:** READY. Two Minors recorded, not fixed:
+  - the CLI-version, credential and slot-directory stops are confirmed by probes, not unit tests;
+  - an interrupted adapter ends the validation (now stated in the protocol).
+
+**Validation (revision 6).**
+- **Pins:** tree `17edea1` (product code identical to `644d419`), kit export `98995885…`, manifest `ffab03e8…`,
+  adapter `d5a9517b…`, all confirmed at initialisation.
+- **Runs:** 104 model runs, all valid; 0 technical retries; 1 result-tool call rejected and corrected by the runner;
+  0 outside reads; 0 hard stops; `claude-sonnet-5`, effort `high` on every run.
+- **Counts:**
+
+  | Passed | Failed | Invalid | Not run |
+  |---|---|---|---|
+  | 50 (V3 corpus 37, enterprise identity 13) | 2 | 0 | 0 |
+
+- **Failures:**
+
+  | Case | Expected | Answer | Classification | Evidence and what is pending |
+  |---|---|---|---|---|
+  | RV-15 (`v4_release/cors_allowlist_session_guarded_safe.js`) | no confirmed finding | CONFIRMED LOW: express-session configured without a `store`, so it uses the default MemoryStore ("leaks memory ... session flooding"; not shared across processes) | **pending**; most likely a V4 review false positive (product judgment) | In the case: `saveUninitialized: false`, `resave: false`, and no route writes to the session. Under express-session's documented behaviour an unmodified session is not stored, so no request in the case can grow the store. Process scaling and restart loss are operational, not security, properties. Pending: that behaviour was not executed here. Alternatively this is a fixture-completeness question: whether a safe fixture should name a production store. This fixture passed in revisions 4 and 5 (NOT_CONFIRMED), so this is also run-to-run variation |
+  | RV-29 (`v4_release/upload_static_hosted_program_deceptive.cs`) | CONFIRMED: upload traversal, download traversal, stored XSS | CONFIRMED both traversals (evidence on the `Upload` and `Download` actions); **no entry of any status** for stored XSS | **V4 product recall miss** (verified) | The fixture shows `UseStaticFiles` publishing the upload directory, and it was built and exercised: `x.html` served as `text/html`. The answer never mentions the static-serving path, so this is not a grading or binding issue: there is no stored-XSS entry to bind. It also matches revision 4, where the runner left stored XSS at NEEDS_VERIFICATION without the hosting code |
+
+- **Release gates:**
+
+  | Gate | Result |
+  |---|---|
+  | Corpus and enterprise identity (all 52 must pass) | **NOT_MET** (50 of 52) |
+  | Hard stops (isolation, pins, binding, integrity, credential) | none |
+  | Product tests on the final tree | context_manifest 271 OK, feedback_store 354 OK (2 skipped) |
+  | Offline fallbacks A/D/E/F | all built-in, floor kept |
+  | Feedback-record checks (9 scenarios) | as before |
+  | Wrappers (PS 5.1 / PS 7 / Bash) | 23 hits each; exit 2 without Python |
+  | Review | passed (fix-only re-review READY) |
+  | Privacy scan | clean apart from the inherited record |
+
+**What this shows.**
+- Every fixture defect found so far is fixed, and no fixture defect caused a failure in this round.
+- The two remaining failures are about the V4 review itself:
+  - one probable false positive, on a configuration default whose attack path the case does not reach;
+  - one clear recall miss, where stored XSS through static hosting is not reported even with the hosting code in the
+    case.
+
+**What it does not show.** Run-to-run stability: each case ran once. RV-15's flip between rounds is itself evidence of
+variance on borderline findings.
+
+**Next (needs a new authorization; nothing was started).**
+1. **RV-29 recall.** Decide whether this is a product fix, and if so start from the kit's upload and file-serving
+   guidance (`plays/file-security.md` "Uploads"). Product code and guidance were not changed in this round.
+2. **RV-15.** Settle the pending classification. Confirm express-session's `saveUninitialized: false` behaviour by
+   running it; then decide product false positive versus fixture completeness (for example naming a store).
+3. **Stability.** A repeated-run measurement would separate variance from defects. It would be a new, separately
+   authorized cohort.
