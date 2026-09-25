@@ -1,10 +1,12 @@
-"""V4 release corpus manifests (v4-release-corpus/1, kept as a record; v4-release-corpus/2, current) and the
+"""V4 release corpus manifests (v4-release-corpus/1 to /3, kept as records; v4-release-corpus/4, current) and the
 V4-release replacement fixtures.
 
 Deterministic checks only -- whether a reviewer reaches the right verdict needs a review run:
-- 39 rows each; every replaced row keeps its form and its "no confirmed finding" expectation, names the V3 fixture it
-  replaces and why, and points at an existing fixture; every other row maps to its unchanged V3 fixture and V3 result;
-- each replacement fixture keeps the property its V3 row tests, and none returns user or account data.
+- 39 rows each; every replaced row keeps its form and expected result, names the V3 fixture it replaces and why, and
+  points at an existing fixture; every other row maps to its unchanged V3 fixture and V3 result;
+- each safe replacement fixture keeps the property its V3 row tests, and none returns user or account data;
+- RV-29's replacement (expected unsafe, /4) shows its hosting path in code, and its expected findings' evidence
+  anchors exist in it -- while the V3 fixture has no hosting code for the stored-XSS anchor to bind to.
 """
 
 from __future__ import annotations
@@ -20,8 +22,10 @@ FIX = os.path.join(REPO, "tests", "fixtures")
 V1 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-manifest.json")
 V2 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-v2-manifest.json")
 V3 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-v3-manifest.json")
+V4 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-v4-manifest.json")
 REPLACED_V2 = {"RV-02", "RV-04", "RV-13", "RV-20", "RV-22", "RV-24", "RV-35", "RV-37"}
 REPLACED_V3 = REPLACED_V2 | {"RV-15", "RV-26", "RV-28"}
+REPLACED_UNSAFE_V4 = {"RV-29"}
 PERSONAL = re.compile(r"\b(user(name)?s?|e-?mail|password|account|balance|phone|ssn|birth|owner)\b", re.I)
 
 
@@ -46,7 +50,7 @@ def _v3_table():
 
 
 class ManifestTests(unittest.TestCase):
-    def check_manifest(self, path, version, replaced, current=False):
+    def check_manifest(self, path, version, replaced, current=False, replaced_unsafe=frozenset()):
         m = _load(path)
         self.assertEqual(m["version"], version)
         self.assertEqual([r["caseId"] for r in m["rows"]], [f"RV-{n:02d}" for n in range(1, 40)])
@@ -57,14 +61,16 @@ class ManifestTests(unittest.TestCase):
             with self.subTest(manifest=version, row=r["caseId"]):
                 base = r["fixture"].rstrip("/")
                 self.assertTrue(os.path.exists(os.path.join(FIX, base)), base)
-                if r["caseId"] in replaced:
+                if r["caseId"] in replaced or r["caseId"] in replaced_unsafe:
                     self.assertTrue(base.startswith("v4_release/"))
-                    self.assertEqual(r["expected"], "NO_CONFIRMED")
+                    unsafe = r["caseId"] in replaced_unsafe
+                    self.assertEqual(r["expected"], "CONFIRMED" if unsafe else "NO_CONFIRMED")
+                    self.assertEqual("expectedFindings" in r, unsafe)
                     self.assertEqual(r["expectationSource"], "tests/validation/v4-release-corpus.md")
                     old = r["replaces"]["fixture"]
                     hits = [ln for ln in table if f"`{old}`" in ln or f"`{old}/`" in ln]
                     self.assertEqual(len(hits), 1, old)
-                    self.assertIn("No confirmed finding", hits[0])
+                    self.assertEqual("No confirmed finding" in hits[0], not unsafe)
                     if current:
                         self.assertIn(f"`tests/fixtures/{base}", doc)
                     self.assertTrue(os.path.exists(os.path.join(FIX, old)), old)
@@ -72,6 +78,7 @@ class ManifestTests(unittest.TestCase):
                         self.assertTrue(r["replaces"].get("reason"))
                 else:
                     self.assertNotIn("replaces", r)
+                    self.assertNotIn("expectedFindings", r)
                     self.assertEqual(r["expectationSource"], "tests/validation/expected-results.md")
                     hits = [ln for ln in table if f"`{base}`" in ln or f"`{base}/`" in ln]
                     if r["member"]:
@@ -86,8 +93,8 @@ class ManifestTests(unittest.TestCase):
         self.check_manifest(V2, "v4-release-corpus/2", REPLACED_V2)
         self.assertEqual(_load(V2)["supersedes"], "v4-release-corpus/1")
 
-    def test_v3_current(self):
-        self.check_manifest(V3, "v4-release-corpus/3", REPLACED_V3, current=True)
+    def test_v3_record(self):
+        self.check_manifest(V3, "v4-release-corpus/3", REPLACED_V3)
         self.assertEqual(_load(V3)["supersedes"], "v4-release-corpus/2")
         rows = {r["caseId"]: r for r in _load(V3)["rows"]}
         for cid, prev in (("RV-04", "v4_release/command_argument_array_allowlisted_safe.js"),
@@ -96,15 +103,25 @@ class ManifestTests(unittest.TestCase):
             self.assertEqual(rows[cid]["replaces"]["previousV4Fixture"], prev)
             self.assertTrue(os.path.exists(os.path.join(FIX, prev)), prev)
 
-    def test_v2_and_v3_keep_every_form_and_member_of_v1(self):
+    def test_v4_current(self):
+        self.check_manifest(V4, "v4-release-corpus/4", REPLACED_V3, current=True, replaced_unsafe=REPLACED_UNSAFE_V4)
+        self.assertEqual(_load(V4)["supersedes"], "v4-release-corpus/3")
+        v3 = {r["caseId"]: r for r in _load(V3)["rows"]}
+        for r in _load(V4)["rows"]:
+            if r["caseId"] not in REPLACED_UNSAFE_V4:
+                self.assertEqual(r, v3[r["caseId"]], r["caseId"])
+        self.assertEqual(_load(V4)["enterpriseIdentity"], _load(V3)["enterpriseIdentity"])
+
+    def test_v2_to_v4_keep_every_form_and_member_of_v1(self):
         v1 = {r["caseId"]: r for r in _load(V1)["rows"]}
-        for r in _load(V2)["rows"] + _load(V3)["rows"]:
+        for r in _load(V2)["rows"] + _load(V3)["rows"] + _load(V4)["rows"]:
             with self.subTest(row=r["caseId"]):
                 self.assertEqual((r["form"], r["member"], r["expected"]), (v1[r["caseId"]]["form"], v1[r["caseId"]]["member"], v1[r["caseId"]]["expected"]))
 
     def test_the_v3_sources_are_still_present_and_the_corpus_says_it_is_not_a_comparison(self):
         for name in ("sql_injection_safe.py", "command_injection_safe.js", "cookie_secure_safe.js", "redirect_local_safe.cs",
-                     "ssrf_allowlist_safe.py", "path_traversal_safe.cs", "cross_file_sql_safe", "cross_file_path_traversal_safe"):
+                     "ssrf_allowlist_safe.py", "path_traversal_safe.cs", "cross_file_sql_safe", "cross_file_path_traversal_safe",
+                     "upload_webroot_content_disposition_deceptive.cs"):
             self.assertTrue(os.path.exists(os.path.join(FIX, name)), name)
         self.assertIn("not a V3-versus-V4 comparison set", _read("tests", "validation", "v4-release-corpus.md"))
 
@@ -299,6 +316,61 @@ class Revision3FixtureTests(unittest.TestCase):
         self.assertIn("MAX_FILES_PER_USER", code)
         self.assertNotIn("f.filename", code)
         self.assertNotRegex(code, r"static")
+
+
+class Revision4Rv29HostingTests(unittest.TestCase):
+    """RV-29 (/4): the hosting path the stored-XSS impact depends on is code inside the case."""
+    NEW = os.path.join(FIX, "v4_release", "upload_static_hosted_program_deceptive.cs")
+    OLD = os.path.join(FIX, "upload_webroot_content_disposition_deceptive.cs")
+
+    def setUp(self):
+        self.code = _code(self.NEW)
+        self.row = next(r for r in _load(V4)["rows"] if r["caseId"] == "RV-29")
+
+    def test_static_files_publish_the_upload_directory(self):
+        self.assertEqual(self.code.count("app.UseStaticFiles("), 1)
+        hosting = re.search(r"app\.UseStaticFiles\(new StaticFileOptions\s*\{(.*?)\}\);", self.code, re.S).group(1)
+        self.assertIn("FileProvider = new PhysicalFileProvider(UploadStorage.Directory)", hosting)
+        self.assertIn("RequestPath = UploadStorage.RequestPath", hosting)
+        self.assertIn("ContentTypeProvider = new FileExtensionContentTypeProvider()", hosting)
+        self.assertIn('public const string RequestPath = "/uploads";', self.code)
+        self.assertEqual(len(re.findall(r"public static readonly string Directory\b", self.code)), 1)
+        self.assertLess(self.code.index("app.UseStaticFiles("), self.code.index("app.MapControllers();"))
+        self.assertIn("app.Run();", self.code)
+
+    def test_upload_writes_the_client_name_into_the_published_directory(self):
+        self.assertIn("var path = Path.Combine(UploadStorage.Directory, file.FileName);", self.code)
+        self.assertIn("System.IO.File.Create(path)", self.code)
+        self.assertNotRegex(self.code, r"GetExtension|GetFileName\(|ContentType ==|StartsWith|GetFullPath|AllowedExtensions")
+
+    def test_download_reads_the_query_name_and_only_sets_content_disposition(self):
+        self.assertIn("public IActionResult Download([FromQuery] string name)", self.code)
+        self.assertIn("var path = Path.Combine(UploadStorage.Directory, name);", self.code)
+        self.assertIn("System.IO.File.ReadAllBytes(path)", self.code)
+        self.assertIn('Response.Headers.Append("Content-Disposition", $"attachment;', self.code)
+
+    def test_three_separately_bound_expected_findings(self):
+        fs = self.row["expectedFindings"]
+        self.assertEqual([f["id"] for f in fs], ["upload-write-traversal", "download-read-traversal", "upload-stored-xss"])
+        self.assertEqual([f["group"] for f in fs], ["traversal", "traversal", "stored-xss"])
+        lines = self.code.split("\n")
+        for f in fs:
+            for anchor in f["evidence"]:
+                with self.subTest(finding=f["id"], anchor=anchor["start"]):
+                    starts = [i for i, ln in enumerate(lines) if anchor["start"] in ln]
+                    self.assertEqual(len(starts), 1)
+                    self.assertTrue(any(anchor["end"] in ln for ln in lines[starts[0]:starts[0] + 30]))
+        xss = fs[2]["evidence"]
+        self.assertEqual([a["start"] for a in xss], ["app.UseStaticFiles(", "public async Task<IActionResult> Upload("])
+
+    def test_the_v3_fixture_has_no_hosting_code_to_bind_the_stored_xss_finding(self):
+        old = _code(self.OLD)
+        self.assertNotIn("UseStaticFiles", old)
+        self.assertNotIn("StaticFileOptions", old)
+        hosting = self.row["expectedFindings"][2]["evidence"][0]["start"]
+        self.assertFalse(any(hosting in ln for ln in old.split("\n")))
+        with open(self.OLD, encoding="utf-8") as fh:
+            self.assertIn("UseStaticFiles()", fh.read())   # asserted in its comments only
 
 
 if __name__ == "__main__":

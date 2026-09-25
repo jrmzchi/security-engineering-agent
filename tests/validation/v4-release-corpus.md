@@ -1,15 +1,16 @@
-# V4 release validation corpus (`v4-release-corpus/3`)
+# V4 release validation corpus (`v4-release-corpus/4`)
 
 The V4 release is validated against a versioned corpus with 39 rows, `RV-01` to `RV-39`.
 
-- **Current version:** `v4-release-corpus/3`, `tests/validation/v4-release-corpus-v3-manifest.json`.
-- **Earlier versions, kept as records:** `/1` (`v4-release-corpus-manifest.json`) and `/2`
-  (`v4-release-corpus-v2-manifest.json`).
+- **Current version:** `v4-release-corpus/4`, `tests/validation/v4-release-corpus-v4-manifest.json`.
+- **Earlier versions, kept as records:** `/1` (`v4-release-corpus-manifest.json`), `/2`
+  (`v4-release-corpus-v2-manifest.json`) and `/3` (`v4-release-corpus-v3-manifest.json`).
 
-28 rows are the V3 corpus rows of `tests/validation/expected-results.md`, unchanged: same fixtures, members, forms
-and expected results. **11 safe rows use V4-release fixtures**, listed below.
+27 rows are the V3 corpus rows of `tests/validation/expected-results.md`, unchanged: same fixtures, members, forms
+and expected results. **11 safe rows use V4-release fixtures**, listed below, and **one unsafe row, RV-29, uses a
+V4-release fixture** (see "RV-29" below).
 
-**This corpus is not a V3-versus-V4 comparison set.** Because 11 rows differ, a result on it cannot be compared
+**This corpus is not a V3-versus-V4 comparison set.** Because 12 rows differ, a result on it cannot be compared
 row-for-row with any historical V3 or Batch 5 figure. Nothing historical was changed:
 - the V3 fixtures;
 - `tests/validation/expected-results.md`;
@@ -44,7 +45,7 @@ genuinely public purpose with no sensitive data.
 | RV-35 | `cross_file_sql_safe/` | an unauthenticated user search returns users' e-mail addresses (CWE-306/CWE-359) | `tests/fixtures/v4_release/cross_file_catalog_search_safe/` | a parameterized LIKE query reached across three files (public catalog fields, 50-row cap) |
 | RV-37 | `cross_file_path_traversal_safe/` | a "reports" directory is served to unauthenticated callers; its sensitivity is not established by the code | `tests/fixtures/v4_release/cross_file_public_manual_download_nolinks_safe/` | canonicalized containment reached across three files (published manuals). **New in revision 3:** no link or reparse point is followed |
 
-Every replacement row's expected result is **No confirmed finding**, with the same trap as its V3 row: a reviewer
+Every safe replacement row's expected result is **No confirmed finding**, with the same trap as its V3 row: a reviewer
 flags the pattern the V3 row names without checking whether the control holds.
 
 ## Differences from revision 2
@@ -60,7 +61,43 @@ flags the pattern the V3 row names without checking whether the control holds.
 
 The revision-2 files stay in the tree unchanged as the record of that corpus version.
 
-`tools/context_manifest/tests/test_release_corpus.py` checks all three manifests deterministically:
+## RV-29 (revision 4): an unsafe row whose impact depended on code the case did not show
+
+The same standard applies to an expected-**unsafe** row: a finding may be CONFIRMED only on what the case shows
+(`plays/finding-validation.md`). A control or execution path the review scope does not contain is not assumed to
+exist, and an impact that depends on it is not CONFIRMED.
+
+- **V3 fixture (unchanged):** `upload_webroot_content_disposition_deceptive.cs`. Its expected impact, stored XSS,
+  needs the upload directory to be served as static content. Only its comments say so (`UseStaticFiles()`); its code
+  has no hosting configuration. With comments stripped, a review following the play leaves stored XSS at
+  NEEDS_VERIFICATION. The revision-4 validation did exactly that at RV-29.
+- **V4-release fixture:** `tests/fixtures/v4_release/upload_static_hosted_program_deceptive.cs`, a complete
+  single-file ASP.NET Core app (a `Program.cs` with top-level statements), so the row keeps its single-file form.
+  `UploadStorage.Directory` is both the directory `UploadController` writes into and the `PhysicalFileProvider` that
+  `app.UseStaticFiles(...)` publishes under `UploadStorage.RequestPath` (`/uploads`), with the extension-based content
+  types (`.html` is served as `text/html`). The deceptive part is kept: the download endpoint sets
+  `Content-Disposition: attachment`, which a direct request to `/uploads/...` never reaches.
+- **Expected result: CONFIRMED, graded as three separate findings.** Each finding needs a CONFIRMED entry that names
+  its class and cites the lines of the case file that prove it. The manifest row's `expectedFindings` holds the
+  keywords and the code anchors from which those lines are located:
+
+  | Finding | Must cite | Group |
+  |---|---|---|
+  | path traversal on upload (arbitrary file write, CWE-22) | the `Upload` action | traversal |
+  | path traversal on download (arbitrary file read, CWE-22) | the `Download` action | traversal |
+  | unrestricted upload -> stored XSS (CWE-434 + CWE-79) | the `UseStaticFiles` configuration **and** the `Upload` action | stored-xss |
+
+  The two traversal findings may share one entry. The stored-XSS finding must be a separate entry. A citation longer
+  than 30 lines binds no finding.
+- **Checked by running it** (2026-09-25, scratchpad build, localhost only, not part of the corpus):
+  - the file compiles against .NET 8;
+  - an uploaded `x.html` is served at `/uploads/x.html` as `text/html` with no `Content-Disposition`;
+  - the upload file name `../../escaped.txt` is written outside the directory;
+  - `/download?name=../../...` reads a file outside the directory.
+
+`tools/context_manifest/tests/test_release_corpus.py` checks all four manifests deterministically:
 - the mapping of every unchanged row against the V3 table;
 - each current replacement fixture's tested property and visible controls;
-- that no replacement fixture exposes user or account data it does not need.
+- that no safe replacement fixture exposes user or account data it does not need;
+- that RV-29's anchors exist in the V4-release fixture, and that the V3 fixture has no hosting code for the stored-XSS
+  finding to bind to.
