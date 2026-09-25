@@ -1,65 +1,72 @@
-# V4 final release validation — pre-registered protocol, revision 5 (2026-09-25)
+# V4 final release validation — pre-registered protocol, revision 6 (2026-09-26)
 
 Written and committed **before any model run** of this attempt. The user authorized:
-- one evidence-based, symmetric correction of RV-29;
-- one independent review of it, one fix-only re-review;
-- then one final validation.
+- the RV-28 fixture correction and the RV-24/26/37 hard-link investigation;
+- a **collect-all** validation method;
+- one independent review, one concentrated fix, one fix-only re-review;
+- then one complete validation of all 39 corpus and 13 enterprise-identity cases.
 
 That authorizes no product change, no product-guidance change, no weaker grader, no rewriting of historical results
-or stops, no Jev call, and no further repair or validation cycle.
+or stops, no Jev call, no model pre-run and no second repair or validation cycle.
 
 **Release base:** the local `v3-slim-golden-baseline` tag, `f5502cdcd079a5589c39f667ebdfbb34e276aafd`. It is not
 `origin/v3-slim`, which was force-updated to an unrelated history (`39a7b0b`) and is handled separately.
 
 **Earlier attempts, kept as records (none is a pass):**
-- **Revision 1** (`cf6fe8d`) stopped at RV-02: CWE-306 on the V3 `sql_injection_safe.py`.
-- **Revision 2** (`868ef5d`, corpus `/1`) stopped at RV-04: CWE-88 on the V3 `command_injection_safe.js`.
-- **Revision 3** (`7d1a767`, corpus `/2`) stopped at RV-15: a missing auth guard on the V3 `cors_restricted_safe.js`.
-- **Revision 4** (`cedcf19`, corpus `/3`) stopped at RV-29, an expected-**unsafe** row
-  (`upload_webroot_content_disposition_deceptive.cs`). The runner confirmed both path traversals but left
-  upload -> stored XSS at NEEDS_VERIFICATION: the static-file serving it depends on is asserted only in the fixture's
-  stripped comments. The record is `work/v4-release/v4-release-report.md` §13, unchanged.
+- **Revision 1** (`cf6fe8d`) stopped at RV-02.
+- **Revision 2** (`868ef5d`, corpus `/1`) stopped at RV-04.
+- **Revision 3** (`7d1a767`, corpus `/2`) stopped at RV-15.
+- **Revision 4** (`cedcf19`, corpus `/3`) stopped at RV-29.
+- **Revision 5** (`298fb31`, corpus `/4`) stopped at RV-28. A valid answer CONFIRMED a race condition (TOCTOU) in the
+  per-user upload quota of `v4_release/file_upload_authenticated_safe.py`, and the code confirms it. The record is
+  `work/v4-release/v4-release-report.md` §14, unchanged.
 
-## The RV-29 correction (corpus `v4-release-corpus/4`)
+## What changed (corpus `v4-release-corpus/5`)
 
-The strict standard that revision 3 applied to safe rows now applies to this unsafe row as well. Per
-`plays/finding-validation.md`, a control or execution path the review scope does not show is not assumed to exist,
-and an impact that depends on it is not CONFIRMED.
+- **RV-28:** `tests/fixtures/v4_release/file_upload_authenticated_quota_atomic_safe.py` (git blob `9e09e177`).
+  - Every control of the previous fixture is kept.
+  - The quota is now an atomic reservation: an exclusive create of one of `MAX_FILES_PER_USER` numbered slot files,
+    released when the write fails.
+  - The previous fixture stays unchanged as the regression input.
+  - The concurrency tests are in `tools/context_manifest/tests/test_release_fixture_quota.py`.
+- **RV-24, RV-26, RV-37:** unchanged. Their reparse-point check does not detect hard links; that was verified by a
+  mechanism test. None of the cases has a write path into its base directory, so the attack is not established. See
+  `work/v4-release/hard-link-threat-model.md`.
+- **Every other row** is `/4` unchanged, including RV-29 and its `expectedFindings`. The RV-29 correction, its review
+  and its recorded limit (a replaced row's own `rowId` is not checked for uniqueness; `/5` has 39 distinct values)
+  are described in revision 5 (`298fb31`) and still apply.
+- **Adapter:** the collect-all driver, the hard-stop policy, the record-integrity check and wider isolation roots
+  (rule 7 below). The grading functions are unchanged from revision 5.
+- **Review:** one independent review found one Major. Stops inside a run (kit, workspace, CLI version, credential,
+  slot directory, missing manifest) exited without being written into the state, so a stopped run could have been
+  resumed. It was fixed: every in-run stop now goes through the recorded stop.
+  - Unit tests and mutants cover the kit and workspace stops and the attempt-level hard stop.
+  - The CLI-version, credential and slot-directory stops were confirmed by the re-reviewer's probes, not by a unit
+    test. That is a recorded limit, not fixed, per the bounded cycle.
 
-- **Fixture:** `tests/fixtures/v4_release/upload_static_hosted_program_deceptive.cs` (git blob `9824286c`). It
-  is a complete single-file ASP.NET Core app, so the row keeps its V3 `single` form. `UploadStorage.Directory` is
-  both the upload destination and the `PhysicalFileProvider` that `app.UseStaticFiles(...)` publishes under
-  `/uploads`. The V3 fixture, `expected-results.md` and every historical result are unchanged.
-- **Expected result:** CONFIRMED, as three separately graded findings (rule 4a below). They are defined in the
-  manifest row's `expectedFindings`.
-- **Manifest:** only RV-29 differs from `/3`. The other 38 rows and the enterprise-identity set have the same parsed
-  values as in `/3` (checked by `tools/context_manifest/tests/test_release_corpus.py`).
-- **Adapter:**
-  - RV-29 is the only expected-unsafe row that may be replaced, and only together with `expectedFindings`.
-  - A manifest that puts `expectedFindings` on any other row, replaces RV-29 without them, carries malformed findings
-    (including a non-string or duplicate `id`), or whose `rowId` (unchanged rows) or `replaces.rowId` (replaced rows)
-    differs from the V3 mapping, stops the run.
-  - **Recorded limit, not fixed** (fix-only re-review, Minor): a replaced row's own `rowId` is not checked for
-    uniqueness. The pinned `/4` manifest has 39 distinct `rowId` values.
-- **Review:** one independent review found no Blocker or Major. Its Minor findings were handled before this protocol
-  was committed:
-  - the `id` type check and the `rowId` cross-check were added, each with adapter tests and mutants;
-  - the keyword-proxy limits were recorded in rule 4a;
-  - the fixture was reordered so that `UseStaticFiles` and the `Upload` action fit one citation of at most 30 lines,
-    with no change in meaning.
+  The Minors and Nits were fixed in the same concentrated cycle:
+  - an attempt-level stop test;
+  - the adapter docstring;
+  - the corpus-document wording on symbolic links, mount points and "served";
+  - the rule 3 pointer.
+
+  Its two open doubts were settled towards stopping:
+  - any read outside the run's workspace and kit is now an `ISOLATION` hard stop, not telemetry;
+  - a transcript cwd or add-dir mismatch is `ISOLATION`, not a retryable `TRANSCRIPT` failure.
+
   One fix-only re-review followed.
 
 ## Pins
 
 | Item | Value |
 |---|---|
-| Tree validated | `d67a81c4ede9356445c1dfe613dec64e64ecc006`: product code identical to `644d419`; the commit adds only the RV-29 fixture, the `/4` manifest, the corpus document and `test_release_corpus.py` changes |
+| Tree validated | `17edea1afd32bafd655aa6ee4c3aac42afa74910`: product code identical to `644d419`. Relative to revision 5, the commit adds only the RV-28 fixture, the `/5` manifest, the corpus document, the hard-link record and test changes |
 | Kit export | tree sha256 `989958851b518c4a6ba132120e94f7ca8b4fe12b5606158f4b1b22e86997d525`, identical to the `644d419` export (checked at initialisation; a different value stops the run) |
-| Corpus manifest | `tests/validation/v4-release-corpus-v4-manifest.json`, `v4-release-corpus/4`, sha256 `8ba55ec401bca54bfbe78354f43ee1e2e0803cc7fe1958aeb016b50cb29d0954` (git blob `0ce919b4`), read from the pinned commit |
-| Expected results | `expected-results.md` `2fac68d5...` (unchanged); `v4-release-corpus.md` `ac2c7221...`; `v4-enterprise-identity-expected-results.md` `320581bc...` (unchanged) |
+| Corpus manifest | `tests/validation/v4-release-corpus-v5-manifest.json`, `v4-release-corpus/5`, sha256 `ffab03e8ff549ca0214338f1beed743f83a9ea77a034e83a6e3e23e61432f741` (git blob `24f81a50`), read from the pinned commit |
+| Expected results | `expected-results.md` `2fac68d5...` (unchanged); `v4-release-corpus.md` `b6e6d6a9...`; `v4-enterprise-identity-expected-results.md` `320581bc...` (unchanged) |
 | Runner | restricted `claude -p` (CLI `2.1.282`), `--model sonnet` (`claude-sonnet-5`), effort `high`, Read/Grep/Glob + the result tool, no shell |
 | Structured-channel library | `v4-planning` at `72dadd1`, read-only; sha256 `ca5476b7eb684ed3d2d2ac48e965dd7d1c3ea27185edaace6381cb5295d412fd` |
-| External adapter (local, not shipped) | `caseval.py` `5e9c3432c95ea58fa8955b0d79f9fde48742a0e4d68cc1e11464e524029d3c38`, `caseresult.py` `42eb03657c6b4dd8a4b59ecff9b27558df892baa0798a3871312efcc97033b00`, `relman.py` `6e18acc02f8c847d3394d1374afc1e22c26df0aff82bd705af3fa6d47aa79d7d` (LF-normalized); run with `CASEVAL_CORPUS_MANIFEST=tests/validation/v4-release-corpus-v4-manifest.json` and `CASEVAL_CORPUS_VERSION=v4-release-corpus/4` (a manifest whose version differs stops the run) |
+| External adapter (local, not shipped) | `caseval.py` `d5a9517b8dc87a320426cae6cdf58c3f255da4b33376cf52f6761d1ae4d4d564`, `caseresult.py` `42eb03657c6b4dd8a4b59ecff9b27558df892baa0798a3871312efcc97033b00`, `relman.py` `6e18acc02f8c847d3394d1374afc1e22c26df0aff82bd705af3fa6d47aa79d7d` (LF-normalized); run with `CASEVAL_CORPUS_MANIFEST=tests/validation/v4-release-corpus-v5-manifest.json` and `CASEVAL_CORPUS_VERSION=v4-release-corpus/5` (a manifest whose version differs stops the run) |
 | Jev | not called in this phase |
 
 ## Rules
@@ -83,7 +90,7 @@ and an impact that depends on it is not CONFIRMED.
    - Line ranges must lie inside the cited file.
 3. **Post-submission re-check.** The harness re-validates the accepted submission: case id, members, that every cited
    path belongs to the case, and line ranges. A response that cites another case's files is **invalid** and is never
-   graded under the wrong case.
+   graded under the wrong case; as a `BINDING` failure it is a hard stop (rule 7).
 4. **Grading** against the expected-results sources of the pinned corpus (per row, as the manifest's
    `expectationSource` names), per entry text (category and summary). Distinct expected findings need distinct
    entries:
@@ -122,18 +129,54 @@ and an impact that depends on it is not CONFIRMED.
     "depends on", "relies on", "missing", "would need", and others). It is a proxy: it can pass a vague sentence
     that uses such a phrase, and fail a specific one that does not. A failure under it is still a failed case.
 6. **Enterprise identity:** same product tree, same isolation and binding rules.
-7. **Technical versus incorrect.**
-   - A technical or schema-invalid run may be retried **once**, and both records are kept. That covers: no accepted
-     submission, channel, transcript or context check failure, binding failure, or manifest production failure.
-   - A **valid but incorrect** answer is a failed case and is never re-run.
-   - Validation stops at the first failed or not-obtained case, and the result is `V4_RELEASE_NOT_READY`.
+7. **Collect-all, with hard stops** (revision 6).
+   - **Valid but incorrect:** a valid answer that does not meet its expectation is recorded as `FAILED` and **never
+     re-run**. Validation then **continues** with the next case, so that every failure of the round is collected.
+     Continuing does not soften a failure: any `FAILED` case makes the release gate `NOT_MET`.
+   - **Technical failure:** a run whose invalid-reason classes are all technical may be retried **once**, and both
+     records are kept. The technical classes are `CHANNEL`, `TRANSCRIPT`, `ANSWER_SCHEMA`, `ANSWER_FORMAT` and
+     `MANIFEST`. A case still invalid after the retry is recorded as `NOT_OBTAINED`, the run continues, and the gate
+     is `NOT_MET`.
+   - **Hard stop** (immediately, no retry; the run ends and is **not resumed**). The run record is kept first. The
+     triggers are:
+     - isolation: `LEAKAGE`, `TOOLS`, `INPUT`, `CONTEXT`, and `ISOLATION`. `ISOLATION` means any read outside the
+       run's own case workspace and the kit (answer material or not, a credential file included), or a transcript
+       whose working directory or additional directories are not the run's own;
+     - a pin mismatch: `CONTEXT_DRIFT`, `IDENTITY`, `MODEL_EFFORT`, and the kit, workspace, CLI-version and
+       manifest-version checks;
+     - a workspace containing answer material, or differing from its plan;
+     - an earlier attempt that was interrupted: its run directory already exists. An adapter interrupted mid-run
+       (Ctrl-C, crash) therefore ends this validation; it is not retried;
+     - a review stage without a classification manifest;
+     - an evidence-binding failure: `BINDING`;
+     - a credential in the adapter's environment (`TYPESAFE_API_KEY`); a runner reading a credential file is covered
+       by `ISOLATION`;
+     - a record that does not read back identical after it is written;
+     - an unexpected case outcome, or any reason class not listed here.
+     Every one of these stops is written into the run state, and the driver refuses to continue a stopped
+     validation. The manifest-version and manifest-shape checks run at initialisation, before any state exists; they
+     prevent the run from starting.
+   - **Isolation roots:**
+     - Every session scratchpad of this project, and the adapter directory itself, are forbidden roots. That includes
+       earlier bases and their records.
+     - Only the runner's own case workspace and the kit are allowed. Any other read is a hard stop, as above.
+     - For calibration: a transcript scan of all 114 revision-4 and revision-5 runs found no such read.
+   - **Frozen during the run:** nothing may change mid-run — no fixture, product, prompt, grader, expected result,
+     protocol or adapter.
+   - **After the run:** every non-passing case is listed and classified as one of:
+     - a product defect;
+     - a fixture defect;
+     - a grading or harness defect;
+     - insufficient evidence.
+     A classification that has not been checked against the code is marked **pending**, not guessed.
 8. **No answer exposure.** Runners never see fixture names, expected results or other cases; the kit is the pinned
    export.
 9. **Limit.** One run per case does not establish run-to-run stability.
 10. **A finding on another safe fixture.** If any other safe case gets a valid, evidence-backed CONFIRMED finding,
-    validation stops and reports it as a failed case. The finding is not dismissed, and the fixture is not
-    reclassified or edited in this attempt.
+    it is a `FAILED` case (rule 7: recorded, and the run continues). The finding is not dismissed, and the fixture
+    is not reclassified or edited in this attempt.
 
-**Result rule.** All 52 cases (39 rows of `v4-release-corpus/4` + 13 enterprise-identity rows) must pass. Beyond that, the product unit tests, fallback checks, review gate and privacy
+**Result rule.** All 52 cases (39 rows of `v4-release-corpus/5` + 13 enterprise-identity rows) must pass. Any
+`FAILED` or `NOT_OBTAINED` case, or a hard stop, makes the gate `NOT_MET`. Beyond that, the product unit tests, fallback checks, review gate and privacy
 scan must still hold on the validated tree (product code identical to `644d419`) for `V4_RELEASE_READY`. Anything else is `V4_RELEASE_NOT_READY`, with no further
 repair or validation cycle.
