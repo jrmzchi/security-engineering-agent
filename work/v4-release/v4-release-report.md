@@ -1,5 +1,23 @@
 # V4 release completion report (2026-09-25)
 
+**Final status after the pre-registered final validation: `V4_RELEASE_NOT_READY` (not pushed).**
+
+- **Protocol:** `work/v4-release/final-validation-protocol.md`, committed before any run (`cf6fe8d`). It uses one
+  isolated workspace and request per case, a case-bound result schema, a post-submission binding check, and one retry
+  for a technical failure only.
+- **Outcome:** validation stopped at case 2 of 52.
+  - `RV-01` (`sql_injection_unsafe.py`) passed.
+  - `RV-02` (`sql_injection_safe.py`, expected: no confirmed finding) returned a **valid, correctly bound** answer with
+    one CONFIRMED entry. The runner did not flag the parameterized query, which is the fixture's trap. It confirmed
+    "Missing Authentication / Unauthorized PII Disclosure (CWE-306), MEDIUM" for the isolated Flask route
+    (`case_02.py:7-18`), which serves users' e-mail addresses with no authentication check.
+  - Under the protocol a safe case with any CONFIRMED entry is a failed case; it was not re-run, and validation stopped.
+- **Not reached:** the remaining 37 V3 cases and all 13 enterprise-identity cases.
+- **Still holding on product tree `644d419`:** unit suites (235 and 354 OK), fallbacks, the review gate (section 9) and
+  the privacy scan.
+
+Section 10 has the details. Sections 1–9 are the earlier attempts, unchanged.
+
 **Terminal status after the separately authorized fix cycle 2: `V4_RELEASE_NOT_READY` (not pushed).**
 
 - **Review gate: passed.** The first cycle's open Major (out-of-scope-caller rule) and Minor (STALE write blocked
@@ -223,3 +241,26 @@ On the final head:
 - a per-case consistency check that rejects answers whose evidence cites another case's file.
 
 It then needs a fresh final validation on this head. That is a separate decision.
+
+## 10. Final pre-registered validation (2026-09-25)
+
+Authorized as one final attempt on product commit `644d419`, with no product change and no further fix or review cycle.
+
+- **Run:** 4 model runs, all valid (2 classification, 2 review); 0 rejected tool calls; 0 binding failures; kit tree
+  `98995885…` (the same export as the fix-cycle-2 run); Jev not called.
+- **RV-01:** PASS.
+- **RV-02:** FAILED. The runner reported one CONFIRMED MEDIUM finding, CWE-306 missing authentication exposing e-mail
+  addresses, on the safe SQL fixture. Its evidence cites only that case's file and lines. It did not report SQL
+  injection; it reported a different weakness that the fixture's expected result does not list.
+- **What this shows:** isolated, case-bound review removes the answer-shifting seen before. It also shows that on a
+  bare snippet the kit can confirm a weakness outside a fixture's intended scope (here, an unauthenticated route),
+  which the corpus counts as a false CONFIRMED on a safe case.
+- **What it does not show:** whether that finding is "wrong", since the route really has no authentication check in
+  the snippet; how the other 50 cases would have scored; or run-to-run stability.
+- **Next:** whichever of these you choose would need a new, separately authorized decision:
+  - decide whether a corpus safe case may carry out-of-scope findings (grade only the fixture's target weakness), or
+    whether the fixture needs its missing context;
+  - or change the kit's severity/confirmation behaviour for out-of-scope observations;
+  - then re-validate.
+
+  None of that was done here.
