@@ -19,7 +19,9 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")
 FIX = os.path.join(REPO, "tests", "fixtures")
 V1 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-manifest.json")
 V2 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-v2-manifest.json")
+V3 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-v3-manifest.json")
 REPLACED_V2 = {"RV-02", "RV-04", "RV-13", "RV-20", "RV-22", "RV-24", "RV-35", "RV-37"}
+REPLACED_V3 = REPLACED_V2 | {"RV-15", "RV-26", "RV-28"}
 PERSONAL = re.compile(r"\b(user(name)?s?|e-?mail|password|account|balance|phone|ssn|birth|owner)\b", re.I)
 
 
@@ -44,7 +46,7 @@ def _v3_table():
 
 
 class ManifestTests(unittest.TestCase):
-    def check_manifest(self, path, version, replaced):
+    def check_manifest(self, path, version, replaced, current=False):
         m = _load(path)
         self.assertEqual(m["version"], version)
         self.assertEqual([r["caseId"] for r in m["rows"]], [f"RV-{n:02d}" for n in range(1, 40)])
@@ -63,9 +65,10 @@ class ManifestTests(unittest.TestCase):
                     hits = [ln for ln in table if f"`{old}`" in ln or f"`{old}/`" in ln]
                     self.assertEqual(len(hits), 1, old)
                     self.assertIn("No confirmed finding", hits[0])
-                    self.assertIn(f"`tests/fixtures/{base}", doc)
+                    if current:
+                        self.assertIn(f"`tests/fixtures/{base}", doc)
                     self.assertTrue(os.path.exists(os.path.join(FIX, old)), old)
-                    if version.endswith("/2"):
+                    if not version.endswith("/1"):
                         self.assertTrue(r["replaces"].get("reason"))
                 else:
                     self.assertNotIn("replaces", r)
@@ -79,13 +82,23 @@ class ManifestTests(unittest.TestCase):
     def test_v1_record(self):
         self.check_manifest(V1, "v4-release-corpus/1", {"RV-02"})
 
-    def test_v2_current(self):
+    def test_v2_record(self):
         self.check_manifest(V2, "v4-release-corpus/2", REPLACED_V2)
         self.assertEqual(_load(V2)["supersedes"], "v4-release-corpus/1")
 
-    def test_v2_keeps_every_form_and_member_of_v1(self):
+    def test_v3_current(self):
+        self.check_manifest(V3, "v4-release-corpus/3", REPLACED_V3, current=True)
+        self.assertEqual(_load(V3)["supersedes"], "v4-release-corpus/2")
+        rows = {r["caseId"]: r for r in _load(V3)["rows"]}
+        for cid, prev in (("RV-04", "v4_release/command_argument_array_allowlisted_safe.js"),
+                          ("RV-24", "v4_release/public_document_download_safe.cs"),
+                          ("RV-37", "v4_release/cross_file_public_manual_download_safe")):
+            self.assertEqual(rows[cid]["replaces"]["previousV4Fixture"], prev)
+            self.assertTrue(os.path.exists(os.path.join(FIX, prev)), prev)
+
+    def test_v2_and_v3_keep_every_form_and_member_of_v1(self):
         v1 = {r["caseId"]: r for r in _load(V1)["rows"]}
-        for r in _load(V2)["rows"]:
+        for r in _load(V2)["rows"] + _load(V3)["rows"]:
             with self.subTest(row=r["caseId"]):
                 self.assertEqual((r["form"], r["member"], r["expected"]), (v1[r["caseId"]]["form"], v1[r["caseId"]]["member"], v1[r["caseId"]]["expected"]))
 
@@ -215,6 +228,77 @@ class Rv35CatalogSearchTests(unittest.TestCase):
         self.assertEqual({c.strip() for c in cols.split(",")}, {"Sku", "Name", "Category"})
         for f in os.listdir(d):
             self.assertIsNone(PERSONAL.search(_code(os.path.join(d, f))), f)
+
+
+class Revision3FixtureTests(unittest.TestCase):
+    """Controls the strict audit required to be visible inside the case (work/v4-release/safe-fixture-audit.md)."""
+
+    def test_rv04_bounded_work_and_same_argument_rules(self):
+        code = _code(os.path.join(FIX, "v4_release", "command_argument_array_bounded_safe.js"))
+        args = re.search(r"execFile\(\s*'convert',\s*\[(.*?)\]", code, re.S).group(1)
+        self.assertEqual([a.strip() for a in args.split(",")], ["source", "'-resize'", "`${size}x${size}`", "'png:-'"])
+        self.assertNotRegex(code, r"\bexec\(|spawn\(|shell\s*:")
+        self.assertIn("if (running >= MAX_CONCURRENT)", code)
+        self.assertIn("res.status(429)", code)
+        self.assertEqual(code.count("running += 1"), 1)
+        self.assertEqual(code.count("running -= 1"), 1)
+        self.assertRegex(code, r"const source = ASSETS\.get\(")
+
+    def test_rv15_session_middleware_and_route_guard_are_in_the_case(self):
+        code = _code(os.path.join(FIX, "v4_release", "cors_allowlist_session_guarded_safe.js"))
+        self.assertIn("require('express-session')", code)
+        self.assertRegex(code, r"SESSION_SECRET\.length < 32\)\s*\{\s*throw")
+        for opt in ("httpOnly: true", "secure: true", "sameSite: 'lax'", "saveUninitialized: false"):
+            self.assertIn(opt, code)
+        self.assertIn("typeof req.session.userId !== 'number'", code)
+        self.assertIn("res.status(401)", code)
+        self.assertRegex(code, r"app\.get\('/api/preferences', requireSignedIn,")
+        self.assertIn("ALLOWED_ORIGINS.has(origin)", code)
+        self.assertIn("res.vary('Origin')", code)
+        self.assertEqual(len(re.findall(r"app\.(get|post|put|delete|patch)\(", code)), 1)
+        self.assertNotRegex(code, r"(?i)email|balance|account|password")
+
+    def check_no_links(self, code, file_var, base_expr):
+        plain = code.replace("System.IO.", "")
+        self.assertIn(f"(File.GetAttributes({file_var}) & FileAttributes.ReparsePoint) != 0", plain)
+        self.assertRegex(code, r"for \(var dir = Path\.GetDirectoryName\(" + file_var + r"\); dir is not null && dir\.Length >= " + base_expr)
+        self.assertIn("(File.GetAttributes(dir) & FileAttributes.ReparsePoint) != 0", plain)
+
+    def test_rv24_rv26_rv37_follow_no_links(self):
+        rv24 = _code(os.path.join(FIX, "v4_release", "public_document_download_nolinks_safe.cs"))
+        self.check_no_links(rv24, "resolved", r"_baseDir\.Length")
+        self.assertIn("StartsWith(_baseDir + Path.DirectorySeparatorChar, StringComparison.Ordinal)", rv24)
+        rv26 = _code(os.path.join(FIX, "v4_release", "path_prefix_canonicalized_nolinks_safe.cs"))
+        self.check_no_links(rv26, "canonical", r"baseDir\.Length")
+        self.assertIn('Path.GetFullPath("/var/app/reports") + Path.DirectorySeparatorChar', rv26)
+        self.assertIn("canonical.StartsWith(_reportsDir, StringComparison.Ordinal)", rv26)
+        d = os.path.join(FIX, "v4_release", "cross_file_public_manual_download_nolinks_safe")
+        self.assertEqual(sorted(os.listdir(d)), ["ManualDownloadController.cs", "ManualFileService.cs", "ManualPathHelper.cs"])
+        rv37 = _code(os.path.join(d, "ManualPathHelper.cs"))
+        self.check_no_links(rv37, "canonical", r"baseDir\.Length")
+        self.assertIn("canonical.StartsWith(_manualsDir, StringComparison.Ordinal)", rv37)
+        for f in os.listdir(d):
+            self.assertNotRegex(_code(os.path.join(d, f)), r"(?i)upload|report|user")
+
+    def test_rv28_access_control_cookie_and_upload_rules_are_in_the_case(self):
+        path = os.path.join(FIX, "v4_release", "file_upload_authenticated_safe.py")
+        code = _code(path)
+        with open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+        upload = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "upload")
+        self.assertEqual([ast.unparse(d) for d in upload.decorator_list],
+                         ["app.route('/upload', methods=['POST'])", "signed_in_required"])
+        self.assertIn('isinstance(session.get("user_id"), int)', code)
+        self.assertIn("abort(401)", code)
+        for cfg in ("SESSION_COOKIE_HTTPONLY=True", "SESSION_COOKIE_SECURE=True", 'SESSION_COOKIE_SAMESITE="Strict"',
+                    "MAX_CONTENT_LENGTH=5 * 1024 * 1024"):
+            self.assertIn(cfg, code)
+        self.assertRegex(code, r"if len\(SECRET_KEY\) < 32:\s*raise")
+        self.assertIn("sniff_extension(data)", code)
+        self.assertIn('f"{uuid.uuid4().hex}.{ext}"', code)
+        self.assertIn("MAX_FILES_PER_USER", code)
+        self.assertNotIn("f.filename", code)
+        self.assertNotRegex(code, r"static")
 
 
 if __name__ == "__main__":
