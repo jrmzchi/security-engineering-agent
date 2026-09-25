@@ -14,9 +14,13 @@ shape.
 `[V4 release]` A sibling `.security/feedback.json.quarantine` file means a
 record that a fresh validation contradicted could not be durably marked
 STALE: while it exists the store loads as degraded and nothing is reused.
-It lists the record ids; only `tools/feedback_store/store.py`'s
-`recover_quarantine()` removes it, after checking each listed record is
-STALE or absent. Do not delete it by hand without that check.
+It lists the record ids and is changed only under its own lock
+(`.security/feedback.json.quarantine.lock`). Recovery is a separate,
+explicit maintenance action, never a step of a review run: only
+`tools/feedback_store/store.py`'s `recover_quarantine()` removes it, after
+checking each listed record is STALE or absent. If the marker itself
+cannot be parsed, recovery refuses and a person must inspect it; any ids a
+later failure could not add are named in the error it raised.
 
 ```json
 {

@@ -45,6 +45,17 @@ class _Repo(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
+    def store_lock_fails(self):
+        """Make only the STORE's lock time out; the quarantine marker keeps its own working lock."""
+        real = store._acquire_lock
+
+        def acquire(path, *a, **k):
+            if path == self.path:
+                raise store.LockTimeoutError("simulated")
+            return real(path, *a, **k)
+
+        return unittest.mock.patch.object(store, "_acquire_lock", side_effect=acquire)
+
     def bytes_on_disk(self):
         with open(self.path, "rb") as fh:
             return fh.read()
@@ -114,7 +125,7 @@ class QuarantineOnFailureTests(_Repo):
 
     def test_lock_timeout_quarantines(self):
         before = self.bytes_on_disk()
-        with unittest.mock.patch.object(store, "_acquire_lock", side_effect=store.LockTimeoutError("simulated")):
+        with self.store_lock_fails():
             res = store.invalidate_contradicted(self.path, repo_root=self.repo, record_ids=["rec-a"], git_commit=None)
         self.assert_quarantined_and_unchanged(res, before)
 
@@ -156,19 +167,20 @@ class QuarantineOnFailureTests(_Repo):
         self.assert_quarantined_and_unchanged(res, before)
 
     def test_quarantine_failure_raises_and_is_never_reported_as_done(self):
-        with unittest.mock.patch.object(store, "_acquire_lock", side_effect=store.LockTimeoutError("simulated")), \
+        with self.store_lock_fails(), \
              unittest.mock.patch.object(store, "_write_quarantine", side_effect=OSError("simulated: read-only volume")):
             with self.assertRaises(store.StoreError) as ctx:
                 store.invalidate_contradicted(self.path, repo_root=self.repo, record_ids=["rec-a"], git_commit=None)
         self.assertIn("unusable for Evidence Reuse", str(ctx.exception))
 
-    def test_an_existing_unreadable_quarantine_is_kept_and_still_blocks(self):
+    def test_an_existing_unreadable_quarantine_is_kept_still_blocks_and_the_new_ids_are_raised(self):
         q = store._quarantine_path_for(self.path)
         with open(q, "w", encoding="utf-8") as fh:
             fh.write("garbage")
-        with unittest.mock.patch.object(store, "_acquire_lock", side_effect=store.LockTimeoutError("simulated")):
-            res = store.invalidate_contradicted(self.path, repo_root=self.repo, record_ids=["rec-a"], git_commit=None)
-        self.assertTrue(res.quarantined)
+        with self.store_lock_fails():
+            with self.assertRaises(store.StoreError) as ctx:
+                store.invalidate_contradicted(self.path, repo_root=self.repo, record_ids=["rec-a"], git_commit=None)
+        self.assertIn("rec-a", str(ctx.exception), "the ids that could not be recorded are named, not dropped")
         with open(q, encoding="utf-8") as fh:
             self.assertEqual(fh.read(), "garbage")
         self.assertTrue(store.load(self.path, repo_root=self.repo).quarantined)
@@ -176,7 +188,7 @@ class QuarantineOnFailureTests(_Repo):
             store.recover_quarantine(self.path, repo_root=self.repo)
 
     def test_quarantines_accumulate_record_ids(self):
-        with unittest.mock.patch.object(store, "_acquire_lock", side_effect=store.LockTimeoutError("simulated")):
+        with self.store_lock_fails():
             store.invalidate_contradicted(self.path, repo_root=self.repo, record_ids=["rec-a"], git_commit=None)
             store.invalidate_contradicted(self.path, repo_root=self.repo, record_ids=["rec-b"], git_commit=None)
         with open(store._quarantine_path_for(self.path), encoding="utf-8") as fh:
@@ -187,7 +199,7 @@ class AdversarialOrderingTests(_Repo):
     """Cases chosen with Jev (release cycle 2)."""
 
     def test_an_ordinary_write_does_not_lift_or_bypass_a_quarantine(self):
-        with unittest.mock.patch.object(store, "_acquire_lock", side_effect=store.LockTimeoutError("simulated")):
+        with self.store_lock_fails():
             store.invalidate_contradicted(self.path, repo_root=self.repo, record_ids=["rec-a"], git_commit=None)
         raw = store._load_unchecked(self.path, repo_root=self.repo)
         store.increment_reuse_count(raw.store, "rec-a")
@@ -206,9 +218,82 @@ class AdversarialOrderingTests(_Repo):
         self.assertIn(eligibility.REASON_RECORD_STALE, reasons)
 
 
+class QuarantineConcurrencyTests(_Repo):
+    """Races the cycle-2 review reproduced (marker read-merge-replace and recover verify-then-remove were unlocked)."""
+
+    def test_concurrent_failed_invalidations_keep_every_id(self):
+        import threading
+        ids = [f"rec-{i}" for i in range(8)]
+        barrier = threading.Barrier(len(ids))
+
+        def fail(rid):
+            barrier.wait()
+            store._write_quarantine(self.path, repo_root=self.repo, record_ids=[rid], detail="simulated")
+
+        threads = [threading.Thread(target=fail, args=(rid,)) for rid in ids]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        with open(store._quarantine_path_for(self.path), encoding="utf-8") as fh:
+            self.assertEqual(sorted(json.load(fh)["recordIds"]), sorted(ids))
+
+    def test_an_id_added_during_recovery_is_not_lost(self):
+        import threading
+        with self.store_lock_fails():
+            store.invalidate_contradicted(self.path, repo_root=self.repo, record_ids=["rec-a"], git_commit=None)
+        store.invalidate_contradicted(self.path, repo_root=self.repo, record_ids=["rec-a"], git_commit=None)  # durable now
+        real_load = store._load_unchecked
+        started = {}
+
+        def load_during_recovery(*a, **k):
+            # another run's failed invalidation of rec-b arrives while recovery is verifying
+            t = threading.Thread(target=store._write_quarantine, args=(self.path,),
+                                 kwargs={"repo_root": self.repo, "record_ids": ["rec-b"], "detail": "simulated"})
+            t.start()
+            t.join(timeout=0.5)
+            started["thread"] = t
+            return real_load(*a, **k)
+
+        with unittest.mock.patch.object(store, "_load_unchecked", side_effect=load_during_recovery):
+            self.assertEqual(store.recover_quarantine(self.path, repo_root=self.repo), ["rec-a"])
+        started["thread"].join(timeout=10)
+        lr = store.load(self.path, repo_root=self.repo)
+        self.assertTrue(lr.quarantined, "rec-b's quarantine must survive the recovery of rec-a")
+        with open(store._quarantine_path_for(self.path), encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh)["recordIds"], ["rec-b"])
+
+    def test_recovery_waits_for_the_marker_lock_and_never_removes_under_it(self):
+        with self.store_lock_fails():
+            store.invalidate_contradicted(self.path, repo_root=self.repo, record_ids=["rec-a"], git_commit=None)
+        store.invalidate_contradicted(self.path, repo_root=self.repo, record_ids=["rec-a"], git_commit=None)
+        held = store._acquire_lock(store._quarantine_path_for(self.path))
+        try:
+            real = store._acquire_lock
+            with unittest.mock.patch.object(store, "_acquire_lock", side_effect=lambda p, *a, **k: real(p, timeout=0.3)):
+                with self.assertRaises(store.LockTimeoutError):
+                    store.recover_quarantine(self.path, repo_root=self.repo)
+        finally:
+            store._release_lock(held)
+        self.assertTrue(store.load(self.path, repo_root=self.repo).quarantined)
+
+
+class LoadForInvalidationTests(_Repo):
+    def test_a_quarantined_store_can_still_be_read_to_find_contradicted_ids_but_not_for_reuse(self):
+        with self.store_lock_fails():
+            store.invalidate_contradicted(self.path, repo_root=self.repo, record_ids=["rec-a"], git_commit=None)
+        self.assertIsNone(store.load(self.path, repo_root=self.repo).store)
+        lr = store.load_for_invalidation(self.path, repo_root=self.repo)
+        self.assertTrue(lr.ok)
+        self.assertIn("rec-b", lr.store["rejectionRecords"])
+        res = store.invalidate_contradicted(self.path, repo_root=self.repo, record_ids=["rec-b"], git_commit=None)
+        self.assertTrue(res.durable)
+        self.assertTrue(store.load(self.path, repo_root=self.repo).quarantined)
+
+
 class RecoveryTests(_Repo):
     def quarantine(self, ids):
-        with unittest.mock.patch.object(store, "_acquire_lock", side_effect=store.LockTimeoutError("simulated")):
+        with self.store_lock_fails():
             return store.invalidate_contradicted(self.path, repo_root=self.repo, record_ids=ids, git_commit=None)
 
     def test_recovery_refuses_while_a_listed_record_is_still_reusable(self):

@@ -59,6 +59,9 @@ class RuleTextTests(unittest.TestCase):
     def test_injection_presumption_is_limited_by_class_and_evidence(self):
         inj = _block(self.rule, "Injection-class sink")
         self.assertIn("ONLY when ALL three are shown directly from the code", inj)
+        # the class list must say it is exhaustive (cycle-2 review Minor 3: an unmarked list is read either way)
+        self.assertIn("This list is exhaustive", inj)
+        self.assertIn("anything not in the exhaustive injection list", _block(self.rule, "Every other class"))
         self.assertIn("evidenced AT the sink", inj)
         self.assertIn("not inferred from a name or type", inj)
         self.assertIn("treat that parameter as attacker-controlled: result CONFIRMED", inj)

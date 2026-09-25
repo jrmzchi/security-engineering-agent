@@ -220,12 +220,16 @@ Final findings
    a REJECTED record for the same occurrence exists
    (`plays/finding-validation.md` step 6), call
    `store.invalidate_contradicted()` — the one write allowed in a
-   degraded or raising run. It marks the record STALE durably, or, if
+   degraded or raising run (in a quarantined run, find that record with
+   `store.load_for_invalidation()`, never for reuse; a store that cannot
+   be parsed cannot name the record, so the notes state the confirmed
+   finding instead). It marks the record STALE durably, or, if
    that cannot be guaranteed, quarantines the store (`load()` then
    reports it degraded and nothing is reused until
-   `store.recover_quarantine()` has verified every listed record); if
-   it raises, the store must be treated as unusable for reuse, and the
-   review's notes say so. **`[ADDED, per a round-1 independent review Minor]`**
+   `store.recover_quarantine()` has verified every listed record —
+   a separate, explicit maintenance action, never a step of a review
+   run); if it raises, the store must be treated as unusable for reuse,
+   and the review's notes say so. **`[ADDED, per a round-1 independent review Minor]`**
    When the store is reported degraded, do NOT write to
    `.security/feedback.json` this run (the sole exception is
    `store.invalidate_contradicted()` above, which never rewrites a store

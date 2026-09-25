@@ -210,10 +210,11 @@ Resolve it this way, every time, so the same code never gets different
 statuses:
 
 ```text
-Injection-class sink -- the defect is a property of the sink code itself
-(SQL/NoSQL/LDAP/OS-command/expression injection; path traversal into a
-filesystem call; unsafe deserialization). The presumption below applies
-ONLY when ALL three are shown directly from the code:
+Injection-class sink -- the defect is a property of the sink code itself.
+This list is exhaustive: SQL, NoSQL, LDAP, XPath or OS-command injection;
+server-side template or expression-language injection; path traversal
+into a filesystem call; unsafe deserialization. The presumption below
+applies ONLY when ALL three are shown directly from the code:
   - the method can be called from code the review does not see
     (public/exported, or internal to a unit the review does not fully
     cover);
@@ -243,15 +244,20 @@ own ownership or role filter is NOT evidence of a missing control
        that class requires on it -- object-level: an ownership or
        tenant check on THIS object (a role check or authentication
        alone does not satisfy it); function-level: a role or policy
-       check: a path that reaches the object with no such check is
-       CONFIRMED on that path's own evidence; if every in-scope path
-       enforces the check, REJECTED for those paths
+       check.
+    -> a path that reaches the object with no such check is CONFIRMED
+       on that path's own evidence
+    -> if every in-scope path enforces the check, REJECTED for those
+       traced paths only (a Feedback record for it covers exactly that
+       path, by its occurrence identity); unseen callers are not
+       covered by that conclusion
     -> if the caller or the control that would decide it cannot be
        established from the reviewed code (e.g. there is no in-scope
        caller at all), NEEDS_VERIFICATION, naming the missing caller or
        control
 
-Every other class (XSS, SSRF, open redirect, CSRF, ...)
+Every other class (anything not in the exhaustive injection list, e.g.
+XSS, SSRF, open redirect, CSRF)
     -> no presumption applies: trace normally; NEEDS_VERIFICATION if a
        required caller fact cannot be established
 
@@ -342,7 +348,8 @@ written for the rest of the run, except that a record this run's
 validation contradicts is still invalidated (step 6): every candidate goes
 through this play's procedure in full (never retry with the offending
 input removed). Without Python that invalidation cannot run: say so in the
-review's notes, naming the record.
+review's notes (which finding was confirmed, and that no record was
+invalidated).
 `[V4 release]`
 
 **Cached results are never treated as permanently correct.** Before
@@ -477,6 +484,12 @@ that schema.
      cannot, quarantines the store so no record is reused until
      `store.recover_quarantine()` verifies the mark; a raise means the
      store is unusable for reuse (see `skills/security-review` step 2).
+     In a run whose store is quarantined, find the contradicted record
+     through `store.load_for_invalidation()` (identity matching only,
+     never reuse). When the store cannot be parsed at all, the record
+     cannot be identified: state the confirmed finding in the review's
+     notes, so whoever repairs the store re-validates it before any
+     reuse.
 ```
 
 **This mechanism's job is to never wrongly exempt a genuinely

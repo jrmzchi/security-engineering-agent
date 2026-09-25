@@ -374,8 +374,9 @@ def load(path: str, *, repo_root: str) -> LoadResult:
             store=None, ok=False, degraded=True, quarantined=True,
             reason=(
                 f"quarantined ({quarantine!r} is present): a record contradicted by a fresh validation could not "
-                "be durably marked STALE, so no record may be reused. Mark the listed records STALE "
-                "(invalidate_contradicted) and then call recover_quarantine(), which verifies them first."
+                "be durably marked STALE, so no record may be reused. Recovery is a separate, explicit maintenance "
+                "action, never a step of a review run: mark the listed records STALE (invalidate_contradicted) "
+                "and then call recover_quarantine(), which verifies them first."
             ),
         )
     return _load_unchecked(path, repo_root=repo_root)
@@ -756,7 +757,9 @@ def invalidate_contradicted(path: str, *, repo_root: str, record_ids, git_commit
     to INVALIDATION_ATTEMPTS times). It never rewrites a store it cannot
     parse.
 
-    If the STALE marks cannot be made durable for ANY reason (unreadable
+    Caller errors in the arguments (`record_ids` not a non-empty list of
+    non-empty strings) raise TypeError before anything is read. Otherwise,
+    if the STALE marks cannot be made durable for ANY reason (unreadable
     store, lock timeout, repeated concurrent change, I/O or validation
     failure, an unusable `reason`), the store is QUARANTINED instead:
     `<path>.quarantine` lists the record ids, and every later `load()`
@@ -809,68 +812,102 @@ def invalidate_contradicted(path: str, *, repo_root: str, record_ids, git_commit
     return InvalidationResult(durable=False, marked=[], already_stale=[], missing=[], quarantined=True, detail=detail)
 
 
-def _write_quarantine(path: str, *, repo_root: str, record_ids, detail: str) -> None:
-    """Create or extend `<path>.quarantine` atomically (temp file + replace).
-    Record ids already listed by an earlier quarantine are kept; an
-    existing marker that cannot be parsed is left untouched (it already
-    blocks reuse, and overwriting it could lose the ids it lists)."""
-    quarantine = _quarantine_path_for(path)
-    _resolve_safe(quarantine, repo_root)
-    ids = list(record_ids)
-    if os.path.lexists(quarantine):
-        try:
-            with open(quarantine, encoding="utf-8") as fh:
-                previous = json.load(fh)["recordIds"]
-            if not isinstance(previous, list):
-                raise ValueError("recordIds is not a list")
-        except (OSError, ValueError, KeyError, TypeError):
-            return
-        ids = list(dict.fromkeys([*previous, *ids]))
-    payload = (json.dumps({"schemaVersion": 1, "recordIds": ids, "detail": detail,
-                           "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, indent=2) + "\n").encode("utf-8")
-    directory = os.path.dirname(os.path.abspath(quarantine)) or "."
-    os.makedirs(directory, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".feedback.quarantine.", suffix=".tmp", dir=directory)
-    try:
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(payload)
-            fh.flush()
-            os.fsync(fh.fileno())
-        _replace_with_retry(tmp, quarantine)
-    except BaseException:
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
-        raise
-
-
-def recover_quarantine(path: str, *, repo_root: str) -> list:
-    """Lift a quarantine only after verifying, on disk, that every record
-    it lists is STALE or absent. Returns the verified ids ([] if the store
-    was not quarantined). Raises `StoreError` -- leaving the quarantine in
-    place -- when the marker or the store cannot be read, or when any
-    listed record is still reusable."""
-    quarantine = _quarantine_path_for(path)
-    _resolve_safe(quarantine, repo_root)
-    if not os.path.lexists(quarantine):
-        return []
+def _read_quarantine_ids(quarantine: str) -> list:
+    """The record ids a quarantine marker lists; StoreError if it cannot be read."""
     try:
         with open(quarantine, encoding="utf-8") as fh:
             ids = json.load(fh)["recordIds"]
         if not isinstance(ids, list) or not all(isinstance(r, str) for r in ids):
             raise ValueError("recordIds is not a list of strings")
+        return ids
     except (OSError, ValueError, KeyError, TypeError) as exc:
-        raise StoreError(f"the quarantine marker {quarantine!r} cannot be read ({type(exc).__name__}); inspect it by hand") from exc
-    loaded = _load_unchecked(path, repo_root=repo_root)
-    if not loaded.ok:
-        raise StoreError(f"the store still cannot be read ({loaded.reason}); the quarantine stays")
-    active = [rid for rid in ids if rid in loaded.store["rejectionRecords"]
-              and loaded.store["rejectionRecords"][rid].get("status") != schema.STATUS_STALE]
-    if active:
-        raise StoreError(f"record(s) {active!r} are still reusable; mark them STALE first; the quarantine stays")
-    os.remove(quarantine)
-    return ids
+        raise StoreError(f"the quarantine marker {quarantine!r} cannot be read ({type(exc).__name__}); "
+                         "inspect it by hand") from exc
+
+
+def _write_quarantine(path: str, *, repo_root: str, record_ids, detail: str) -> None:
+    """Create or extend `<path>.quarantine` atomically (temp file + replace),
+    under the marker's OWN lock (`<path>.quarantine.lock` -- never the
+    store's lock, which may be exactly what just failed), so two concurrent
+    failed invalidations cannot drop each other's ids and a concurrent
+    `recover_quarantine()` cannot remove an id added after it verified.
+    Ids already listed are kept. An existing marker that cannot be parsed is
+    left untouched (it already blocks reuse) and StoreError is raised naming
+    the new ids, which would otherwise be recorded nowhere."""
+    quarantine = _quarantine_path_for(path)
+    _resolve_safe(quarantine, repo_root)
+    directory = os.path.dirname(os.path.abspath(quarantine)) or "."
+    os.makedirs(directory, exist_ok=True)
+    lock_path = _acquire_lock(quarantine)
+    try:
+        ids = list(record_ids)
+        if os.path.lexists(quarantine):
+            try:
+                previous = _read_quarantine_ids(quarantine)
+            except StoreError as exc:
+                raise StoreError(f"the existing quarantine marker cannot be read, so {ids!r} could not be added to it; "
+                                 "the store stays quarantined -- add these ids by hand") from exc
+            ids = list(dict.fromkeys([*previous, *ids]))
+        payload = (json.dumps({"schemaVersion": 1, "recordIds": ids, "detail": detail,
+                               "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, indent=2) + "\n").encode("utf-8")
+        fd, tmp = tempfile.mkstemp(prefix=".feedback.quarantine.", suffix=".tmp", dir=directory)
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(payload)
+                fh.flush()
+                os.fsync(fh.fileno())
+            _replace_with_retry(tmp, quarantine)
+        except BaseException:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            raise
+    finally:
+        _release_lock(lock_path)
+
+
+def load_for_invalidation(path: str, *, repo_root: str) -> LoadResult:
+    """[ADDED, V4 release] Read the store EVEN WHEN it is quarantined, for
+    ONE purpose: finding the REJECTED record(s) that a fresh validation in
+    this run contradicts (match the candidate with
+    `identity.check_occurrence_identity` against each record, then pass the
+    matching ids to `invalidate_contradicted`). Never reuse a record read
+    through this function -- `load()` is the only entry point for reuse. A
+    store that cannot be parsed is still reported degraded here too."""
+    return _load_unchecked(path, repo_root=repo_root)
+
+
+def recover_quarantine(path: str, *, repo_root: str) -> list:
+    """Lift a quarantine only after verifying, on disk, that every record
+    it lists is STALE or absent -- a separate, explicit maintenance action,
+    never a step of a review run. Holds the marker's lock for the whole
+    read -> verify -> remove sequence, so an id added concurrently is either
+    verified or keeps the quarantine. Returns the verified ids ([] if the
+    store was not quarantined). Raises `StoreError` -- leaving the quarantine
+    in place -- when the marker or the store cannot be read, or when any
+    listed record is still reusable."""
+    quarantine = _quarantine_path_for(path)
+    _resolve_safe(quarantine, repo_root)
+    if not os.path.lexists(quarantine):
+        return []
+    lock_path = _acquire_lock(quarantine)
+    try:
+        ids = _read_quarantine_ids(quarantine)
+        try:
+            loaded = _load_unchecked(path, repo_root=repo_root)
+        except OSError as exc:
+            raise StoreError(f"the store cannot be read ({type(exc).__name__}); the quarantine stays") from exc
+        if not loaded.ok:
+            raise StoreError(f"the store still cannot be read ({loaded.reason}); the quarantine stays")
+        active = [rid for rid in ids if rid in loaded.store["rejectionRecords"]
+                  and loaded.store["rejectionRecords"][rid].get("status") != schema.STATUS_STALE]
+        if active:
+            raise StoreError(f"record(s) {active!r} are still reusable; mark them STALE first; the quarantine stays")
+        os.remove(quarantine)
+        return ids
+    finally:
+        _release_lock(lock_path)
 
 
 def mark_revalidated(store: dict, record_id: str, new_record: dict) -> None:

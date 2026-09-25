@@ -114,8 +114,12 @@ network connection, or a `TYPESAFE_API_KEY`.
   A record that a new validation contradicts is marked STALE even when
   reuse is off for the run (`store.invalidate_contradicted()`); if that
   cannot be persisted, the store is quarantined
-  (`.security/feedback.json.quarantine`) and nothing is reused until
-  `store.recover_quarantine()` has verified the record is STALE.
+  (`.security/feedback.json.quarantine`) and nothing is reused until a
+  person runs `store.recover_quarantine()` as a separate maintenance step
+  (never during a review), which first verifies the record is STALE. A
+  store that cannot be parsed cannot name a contradicted record: the
+  review's notes state the confirmed finding, and whoever repairs the
+  store must re-validate it before any reuse.
   Procedure: `plays/finding-validation.md`'s "Feedback Learning" sections;
   format: `templates/feedback-store.md`.
 - **Enterprise identity.** Loaded only when the play's "When this play
