@@ -320,6 +320,9 @@ Security impact
 If any link in this chain cannot be demonstrated with evidence
 (file/line, or a concrete traced value), the finding is not HIGH/CRITICAL
 confidence — see the confidence model in `plays/finding-validation.md`.
+A sink whose callers are all outside the review scope is not a missing
+link: see that play's "Rule — a sink whose callers are outside the review
+scope".
 
 ## Where to look next (progressive disclosure)
 

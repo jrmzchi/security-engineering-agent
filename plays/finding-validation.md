@@ -198,6 +198,41 @@ XSS, SSRF, IDOR, deserialization, and similar); apply severity based on
 exposure and blast radius (see the severity model above) to secrets,
 dependency, and configuration findings.
 
+**Rule — a sink whose callers are outside the review scope.** `[V4
+release]` A vulnerable operation often sits in a method that nothing in
+the reviewed files calls: a repository, data-access or library method
+whose own parameters reach the sink. The "Entry point" and "Controlled
+data" links then depend on callers the review cannot see. Resolve it
+this way, every time, so the same code never gets different statuses:
+
+```text
+The method is callable from outside its own file (public/exported, or
+internal to an assembly/package the review does not fully cover), and a
+parameter reaches the sink with no sanitization, validation or
+parameterization in between
+    -> treat that parameter as attacker-controlled: the method's own
+       signature is the trust boundary, because nothing in scope
+       constrains what a caller passes
+    -> if the sink's unsafe behavior is itself shown from the code
+       (e.g. the value is concatenated into raw SQL), the result is
+       CONFIRMED; state in the finding's evidence that attacker control
+       rests on this rule (callers outside the review scope)
+    -> assign severity from the severity model as usual; the unseen
+       callers may be one reason to lower it, never a reason by
+       themselves to use NEEDS_VERIFICATION
+
+An in-scope caller exists
+    -> trace the real callers instead; this rule does not apply, and a
+       caller that provably constrains the value can still make the
+       candidate REJECTED
+```
+
+`NEEDS_VERIFICATION` remains the answer when a required fact about the
+sink, or about a control inside the reviewed code, cannot be
+established — not merely because the callers are out of scope. This rule
+is a defined reading of the "Entry point" link above, like the
+exposure-type exception; it does not relax the chain for anything else.
+
 ## Baseline origin
 
 For a diff-aware or development-time review specifically (see
