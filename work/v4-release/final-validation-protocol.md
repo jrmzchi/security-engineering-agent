@@ -1,36 +1,63 @@
-# V4 final release validation — pre-registered protocol, revision 2 (2026-09-25)
+# V4 final release validation — pre-registered protocol, revision 3 (2026-09-25)
 
-Written and committed **before any model run** of this attempt. It is one final attempt, authorized by the user after
-the RV-02 decision. It authorizes no product change and no further fixture, fix or review cycle.
+Written and committed **before any model run** of this attempt. The user authorized a bounded audit of every
+expected-safe case followed by one final validation. That authorizes no product change, no gate relaxation, no
+rewriting of historical results, and no further audit or validation cycle.
 
-**What changed from revision 1 (`cf6fe8d`, stopped at RV-02):** only the corpus.
-- That attempt's RV-02 answer, a CONFIRMED missing-authentication finding on the V3 `sql_injection_safe.py`, is
-  accepted as a real vulnerability in that fixture. It is not suppressed, and the "safe case: no CONFIRMED" rule is
-  unchanged.
-- The validation now uses the versioned corpus `v4-release-corpus/1`
-  (`tests/validation/v4-release-corpus-manifest.json`). RV-02 maps to
-  `tests/fixtures/v4_release/catalog_lookup_parameterized_safe.py`; the other 38 rows map to their unchanged V3
-  fixtures and expected results.
-- It is **not** a V3-versus-V4 comparison set (`tests/validation/v4-release-corpus.md`).
-- Rules 1–9 are unchanged, apart from the reading of rule 4 and the addition of rule 10.
+**Earlier attempts, kept as records (neither is a pass):**
+- **Revision 1** (`cf6fe8d`) stopped at RV-02. The V3 `sql_injection_safe.py` returns users' e-mail addresses without
+  authentication, and the review CONFIRMED it (CWE-306).
+- **Revision 2** (`868ef5d`, corpus `v4-release-corpus/1`) stopped at RV-04. The V3 `command_injection_safe.js`
+  passes a request value to ImageMagick `convert`, and the review CONFIRMED it (CWE-88).
+
+**The audit behind revision 3.** All 24 expected-safe cases (18 corpus rows and 6 enterprise-identity rows) were read
+on their actual code; the details are in `tests/validation/v4-release-corpus.md`.
+- **8 V3 fixtures have a real or evidence-supported incidental weakness:** RV-02, RV-04, RV-13, RV-20, RV-22, RV-24,
+  RV-35 and RV-37. Each is replaced, for the V4 release corpus only, by a V4-release fixture that keeps the tested
+  property.
+- **16 cases are kept unchanged:** the other 10 corpus rows and all 6 enterprise-identity rows.
+- **Every case could be fixed without changing its tested property,** so the audit found no stop.
+- **Jev** (the phase's last call) was advisory only.
+- **Rules 1–10 below are unchanged.**
+- **Revision 3 corpus:** `v4-release-corpus/2`. It is **not** a V3-versus-V4 comparison set.
+
+## Rows that differ from the V3 corpus
+
+| Row | V3 fixture (unchanged) | V4-release fixture (git blob at the validated commit) |
+|---|---|---|
+| RV-02 | `sql_injection_safe.py` | `v4_release/catalog_lookup_parameterized_safe.py` `35613a3d` |
+| RV-04 | `command_injection_safe.js` | `v4_release/command_argument_array_allowlisted_safe.js` `08de10ed` |
+| RV-13 | `cookie_secure_safe.js` | `v4_release/cookie_flags_anonymous_session_safe.js` `eb52f3e4` |
+| RV-20 | `redirect_local_safe.cs` | `v4_release/local_redirect_preferences_safe.cs` `5380fa8c` |
+| RV-22 | `ssrf_allowlist_safe.py` | `v4_release/ssrf_allowlist_pinned_safe.py` `e853ca76` |
+| RV-24 | `path_traversal_safe.cs` | `v4_release/public_document_download_safe.cs` `6288fd9b` |
+| RV-35 | `cross_file_sql_safe/` | `v4_release/cross_file_catalog_search_safe/` (`ProductRepository.cs` `43a94310`, `ProductSearchService.cs` `b5ebbacd`, `ProductsController.cs` `0231c7be`) |
+| RV-37 | `cross_file_path_traversal_safe/` | `v4_release/cross_file_public_manual_download_safe/` (`ManualDownloadController.cs` `1a8357be`, `ManualFileService.cs` `ca00bb18`, `ManualPathHelper.cs` `4226eeef`) |
+
+The reason for each replacement is in the manifest's `replaces.reason` field and in `v4-release-corpus.md`. Every
+replaced row keeps its V3 form, member and "no confirmed finding" expectation. The adapter refuses a manifest in which
+any other row differs, or in which an expected-unsafe row is replaced.
 
 ## Pins
 
 | Item | Value |
 |---|---|
-| Tree validated | `ef8a9e471e18a74fe0186be3a1019f5e971240ed`: product code identical to `644d419`; adds only the RV-02 fixture, the corpus manifest and document, and `tools/context_manifest/tests/test_release_corpus.py` |
+| Tree validated | `53ef5397e091fa784ef3049f9b41dcacce3c469e`: product code identical to `644d419`; adds only fixtures, corpus manifests and documents, and `tools/context_manifest/tests/test_release_corpus.py` |
 | Kit export | `git archive` of that commit (kit paths, package tests dropped); tree sha256 `989958851b518c4a6ba132120e94f7ca8b4fe12b5606158f4b1b22e86997d525`, identical to the `644d419` export |
-| Corpus manifest | `v4-release-corpus/1`, sha256 `08cc741c8017f57766429240f9b845c7de6b7fac22a03a6513bac4854bf2ef5b`; the adapter reads it from the pinned commit (never the working tree) and stops if a row other than the recorded RV-02 replacement differs from the original 39-row mapping |
-| Expected results | `expected-results.md` `2fac68d5…`, `v4-release-corpus.md` `3e55aad1…`, `v4-enterprise-identity-expected-results.md` `320581bc…` |
+| Corpus manifest | `tests/validation/v4-release-corpus-v2-manifest.json`, `v4-release-corpus/2`, sha256 `cd6f8e96f11163a8a9cfdf171a1e2a08ebe8269bb5b4d68fbc62fec7df6f510e` (git blob `52668972`); read from the pinned commit, never the working tree |
+| Expected results | `expected-results.md` `2fac68d5…` (unchanged); `v4-release-corpus.md` `0051c4dc…`; `v4-enterprise-identity-expected-results.md` `320581bc…` (unchanged) |
 | Runner | restricted `claude -p` (CLI `2.1.282`), `--model sonnet` (`claude-sonnet-5`), effort `high`, tools Read/Grep/Glob + the result tool only, no shell |
 | Structured-channel library | `v4-planning` at `72dadd1`, used read-only; package sha256 `ca5476b7eb684ed3d2d2ac48e965dd7d1c3ea27185edaace6381cb5295d412fd` |
-| External adapter (local, outside the release tree, not shipped) | `caseval.py` `de7f62c627324fed0e986f946a5406108e8f96da75d2ffcaafd5e643ddd9aae7` (revision 1 plus the manifest-driven plan), `caseresult.py` `42eb03657c6b4dd8a4b59ecff9b27558df892baa0798a3871312efcc97033b00`, `relman.py` `6e18acc02f8c847d3394d1374afc1e22c26df0aff82bd705af3fa6d47aa79d7d` (LF-normalized) |
+| External adapter (local, outside the release tree, not shipped) | `caseval.py` `8f4a9767714032fc3e103c0dc996959ed08a9742e23f6654ba09728350eed8db`, `caseresult.py` `42eb03657c6b4dd8a4b59ecff9b27558df892baa0798a3871312efcc97033b00`, `relman.py` `6e18acc02f8c847d3394d1374afc1e22c26df0aff82bd705af3fa6d47aa79d7d` (LF-normalized) |
 | Manifests | built and validated by the release tree's own `tools/context_manifest` (no key) |
-| Jev | not called |
+| Jev | not called during validation |
 
-The adapter's binding, grading and manifest handling were tested before dispatch with 20 synthetic cases. That
-covers revision 1's 18, plus: the plan is taken from the pinned manifest, and a tampered manifest (changed row,
-missing replacement record, other version, missing row) stops the run.
+The adapter was tested with 20 synthetic cases before dispatch:
+- the binding, grading and plan checks of the earlier revisions;
+- the v2 plan read from the pinned manifest;
+- the refusal of a tampered manifest: a changed row, a missing replacement record, a changed expected result or form,
+  a replacement naming the wrong original, a replacement of an expected-unsafe row, the wrong version, or a missing
+  row.
 
 ## Rules
 
@@ -80,6 +107,6 @@ missing replacement record, other version, missing row) stops the run.
     validation stops and reports it as a failed case. The finding is not dismissed, and the fixture is not
     reclassified or edited in this attempt.
 
-**Result rule.** All 52 cases (39 corpus rows + 13 enterprise-identity rows) must pass. Beyond that, the product unit tests, fallback checks, review gate and privacy
+**Result rule.** All 52 cases (39 rows of `v4-release-corpus/2` + 13 enterprise-identity rows) must pass. Beyond that, the product unit tests, fallback checks, review gate and privacy
 scan must still hold on `644d419` for `V4_RELEASE_READY`. Anything else is `V4_RELEASE_NOT_READY`, with no further
 repair or validation cycle.
