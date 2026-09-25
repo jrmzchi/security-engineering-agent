@@ -82,7 +82,9 @@ network connection, or a `TYPESAFE_API_KEY`.
   domains and budget inline, as V3 did, and records that the manifest path
   was unavailable (`skills/security-review` step 1). Only the kit's own
   consistency check needs Python; it stops with `ERROR` (exit code 2)
-  rather than skipping its `SCOPE_COVERAGE` category.
+  rather than skipping its `SCOPE_COVERAGE` category. Evidence Reuse is
+  off without Python: no record is reused or written, so every candidate
+  gets full validation.
 - **Jev (optional, experimental).** With `TYPESAFE_API_KEY` set in the
   environment, the orchestrator makes one HTTPS request to the TypeSafe
   System One API, with no retry and a per-socket-operation timeout. Jev may add domains, raise

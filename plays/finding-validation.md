@@ -295,6 +295,11 @@ and keep the main findings summary focused on what survived validation.
 
 ## Feedback Learning — reusing a REJECTED result `[V4 Batch 1]`
 
+**Evidence Reuse runs only through `tools/feedback_store/`.** Without a
+working Python 3 interpreter (see `skills/security-review` step 1's
+fallback), no record is reused and none is written: every candidate goes
+through this play's procedure in full. `[V4 release]`
+
 **Cached results are never treated as permanently correct.** Before
 this play's own procedure re-derives a REJECTED conclusion from
 scratch, check whether an existing, still-eligible Feedback record

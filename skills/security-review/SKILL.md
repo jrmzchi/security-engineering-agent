@@ -204,7 +204,13 @@ Final findings
    step 7 ever tries to reuse anything from it. A missing or corrupted
    store degrades Evidence Reuse for this run only (every candidate
    just goes through full validation) — it never blocks or skips this
-   step itself. **`[ADDED, per a round-1 independent review Minor]`**
+   step itself. **`[V4 release]`** The same applies when step 1's
+   fallback applies (no working Python 3 interpreter): Evidence Reuse
+   is then OFF for the whole run — do not read `.security/feedback.json`
+   records and apply their checks by hand, do not reuse any record, do
+   not write the store; every candidate goes through full validation
+   in step 7, and the review's notes say why. Occurrence identity and
+   path comparison are only defined by `tools/feedback_store/`'s code. **`[ADDED, per a round-1 independent review Minor]`**
    When the store is reported degraded, do NOT write to
    `.security/feedback.json` this run — do not "auto-heal" by writing
    a fresh/empty store back over it, which would silently destroy
