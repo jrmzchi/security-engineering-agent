@@ -89,6 +89,48 @@ try {
     $hasNode   = Test-EcosystemPresent -RepoRoot $repoRoot -Patterns @('package.json')
     $hasPython = Test-EcosystemPresent -RepoRoot $repoRoot -Patterns @('requirements.txt', 'pyproject.toml', 'setup.py', 'Pipfile')
 
+    # [ADDED, V4 Batch 0] This kit's OWN runtime dependency
+    # (tools/context_manifest/, invoked by
+    # scripts/*/consistency-check.* -- see tools/README.md), NOT the
+    # target repository's ecosystem -- unlike the 'python' row below,
+    # this one is never downgraded to OPTIONAL, since it is required
+    # regardless of what ecosystem the reviewed repository uses.
+    # command -v/Get-Command alone is not enough: a "python3"/"python"
+    # name on PATH can be a non-functional App Execution Alias stub
+    # that is present but exits non-zero instead of running -- verified
+    # here by actually invoking it, the same check
+    # scripts/windows/consistency-check.ps1's own PYTHON_BIN detection
+    # uses.
+    function Test-PythonV4Runtime {
+        # [FIXED, per independent review]: this whole function now runs
+        # under a locally relaxed $ErrorActionPreference -- under this
+        # script's global EAP='Stop', a native command's own stderr
+        # output (e.g. the broken-stub scenario this function exists to
+        # detect) is itself a terminating error on PowerShell 5.1 even
+        # when redirected, which would otherwise crash the entire
+        # doctor.ps1 report (caught by its outer try/catch as "doctor.ps1
+        # failed") instead of just reporting this one row as MISSING.
+        # Same fix as scripts/windows/consistency-check.ps1's own
+        # Invoke-NonTerminating. Also requires 3.7+, not just "runs at
+        # all" -- see that script's matching comment.
+        $prevEAP = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            foreach ($candidate in @('python3', 'python')) {
+                $cmd = Get-Command $candidate -ErrorAction SilentlyContinue
+                if (-not $cmd) { continue }
+                $null = & $candidate -c "import sys; sys.exit(0 if sys.version_info >= (3, 7) else 1)" 2>$null
+                if ($LASTEXITCODE -eq 0) {
+                    $version = (& $candidate --version 2>&1 | Select-Object -First 1).ToString().Trim()
+                    return [PSCustomObject]@{ Name = 'python-v4'; Status = 'FOUND'; Path = $cmd.Source; Version = "$version (as: $candidate)" }
+                }
+            }
+            return [PSCustomObject]@{ Name = 'python-v4'; Status = 'MISSING'; Path = $null; Version = $null }
+        } finally {
+            $ErrorActionPreference = $prevEAP
+        }
+    }
+
     $results = @(
         Test-Tool -Name 'git'         -Command 'git'
         Test-Tool -Name 'semgrep'     -Command 'semgrep'
@@ -101,6 +143,7 @@ try {
         Test-Tool -Name 'python'      -Command 'python'
         Test-Tool -Name 'pip'         -Command 'pip'
         Test-Tool -Name 'pip-audit'   -Command 'pip-audit'
+        Test-PythonV4Runtime
     )
 
     # Ecosystem-native tools are only "required" (MISSING) when their

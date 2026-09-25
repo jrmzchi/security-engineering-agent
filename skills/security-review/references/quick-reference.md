@@ -19,6 +19,7 @@ a fast triage aid, not a substitute for reading the play.
 | Request body bound directly onto a persistence model | `plays/api-security.md` (mass assignment) |
 | `GET/DELETE /resource/{id}` style routes | `plays/authorization.md` (IDOR/BOLA) |
 | Login, password reset, session/cookie/JWT handling | `plays/authentication.md` |
+| Entra ID / ADFS sign-in (`AddOpenIdConnect`, `AddMicrosoftIdentityWebApp`, `AddJwtBearer` with a tenant authority), `LdapConnection`/`DirectoryEntry`/`PrincipalContext`/`ldap3`/`ldapjs`, `AddNegotiate`/`WindowsIdentity`/IIS Windows Authentication | `plays/enterprise-identity-security.md` (with `plays/authentication.md`/`plays/authorization.md`) |
 | `[Authorize]`/role/policy checks, or their absence | `plays/authorization.md` |
 | Hardcoded keys, static IV/nonce, weak hash for passwords, `Random`/`Math.random()`/`random.random()` for security tokens | `plays/data-security.md` |
 | File upload/download, ZIP/archive extraction, path building from user input | `plays/file-security.md` |

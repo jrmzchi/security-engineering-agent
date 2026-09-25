@@ -194,6 +194,95 @@ foreach ($d in @('output\scans', 'output\reports')) {
     }
 }
 
+# --- SCOPE_COVERAGE: Group 3 play Scope vs. tools/context_manifest's ------
+# rule table, both directions (implementation-batches.md Batch 0
+# criterion 7). Unlike every category above, a SCOPE_COVERAGE hit is a
+# confirmed defect requiring a code change, not a judgment call -- see
+# plays/repository-consistency.md's SCOPE_COVERAGE entry. This script
+# delegates to the single shared Python implementation in
+# tools/context_manifest/ and does not, and must not, reimplement the
+# comparison itself (see tools/context_manifest/scope_coverage.py's own
+# module docstring) -- scripts/macos/consistency-check.sh calls the
+# exact same entry point.
+#
+# [FIXED, per independent review]: every native-command invocation and
+# error write below runs under a temporarily relaxed
+# $ErrorActionPreference and writes stderr via [Console]::Error, not
+# Write-Error -- under this script's global EAP='Stop' (line 19),
+# Write-Error and a native command's own stderr output are BOTH
+# terminating errors on PowerShell 5.1, which was silently turning the
+# intended `exit 2` below into PowerShell's own uncaught-error exit
+# code (1) instead, and could abort the whole script from inside the
+# python3-stub-detection loop before it ever reached the working
+# `python` fallback. Mirrors scripts/windows/doctor.ps1's own
+# Test-Tool, which already documents and works around this exact
+# PS 5.1 behavior.
+function Write-ScopeCoverageError {
+    param([string]$Message)
+    [Console]::Error.WriteLine($Message)
+}
+
+function Invoke-NonTerminating {
+    param([scriptblock]$Action)
+    $prevEAP = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $Action
+    } finally {
+        $ErrorActionPreference = $prevEAP
+    }
+}
+
+$PythonBin = $null
+foreach ($candidate in @('python3', 'python')) {
+    $cmd = Get-Command $candidate -ErrorAction SilentlyContinue
+    if (-not $cmd) { continue }
+    # Get-Command alone is not enough: on Windows, a "python3"/"python"
+    # name on PATH can be a non-functional App Execution Alias stub
+    # (present, but exits non-zero instead of running) -- verified by
+    # actually invoking it, the same FOUND-vs-FAILED distinction
+    # scripts/windows/doctor.ps1's Test-Tool already makes for other
+    # tools. [FIXED, per independent review]: also require 3.7+ here,
+    # not just "runs at all" -- tools/context_manifest/ uses
+    # `from __future__ import annotations` throughout, which an older
+    # interpreter cannot even import, and cli.py's own version check
+    # cannot run on an interpreter unable to import cli.py in the first
+    # place (see that module's own comment) -- this probe is the only
+    # place that check can actually happen.
+    $null = Invoke-NonTerminating { & $candidate -c "import sys; sys.exit(0 if sys.version_info >= (3, 7) else 1)" 2>$null }
+    if ($LASTEXITCODE -eq 0) { $PythonBin = $candidate; break }
+}
+if (-not $PythonBin) {
+    Write-ScopeCoverageError "ERROR: Python 3 not found on PATH -- required for the SCOPE_COVERAGE check (V4 core runtime prerequisite, see tools/README.md). Run scripts/windows/doctor.ps1 for install guidance."
+    exit 2
+}
+Push-Location $RepoRoot
+try {
+    # [FIXED, per a round-2 independent review Minor]: -B disables
+    # writing __pycache__/*.pyc for this invocation -- without it, this
+    # check was not idempotent (see scripts/macos/consistency-check.sh's
+    # matching comment).
+    $ScopeCoverageOutput = Invoke-NonTerminating { & $PythonBin -B -m tools.context_manifest.cli scope-coverage-check 2>&1 }
+    $ScopeCoverageExit = $LASTEXITCODE
+} finally {
+    Pop-Location
+}
+if ($ScopeCoverageExit -eq 2) {
+    Write-Output ''
+    $ScopeCoverageOutput | ForEach-Object { Write-ScopeCoverageError $_ }
+    Write-ScopeCoverageError 'ERROR: SCOPE_COVERAGE check could not run.'
+    exit 2
+} elseif ($ScopeCoverageExit -ne 0) {
+    # Any other non-zero exit (e.g. an uncaught Python exception, exit 1
+    # from a Python interpreter too old to run this module -- see
+    # tools/context_manifest/cli.py's own disclosed limitation on this)
+    # is treated the same as a confirmed SCOPE_COVERAGE hit, matching
+    # scripts/macos/consistency-check.sh's equivalent branch.
+    Write-Output ''
+    $ScopeCoverageOutput | ForEach-Object { Write-Output $_ }
+    $Hits++
+}
+
 Write-Output ''
 if ($Hits -eq 0) {
     Write-Output 'Result:'

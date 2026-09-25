@@ -88,7 +88,7 @@ to how security-sensitive it turns out to be:
 6. proportional targeted review     -> skills/security-review (TARGETED mode)
    (multi-file candidates: plays/cross-file-data-flow.md; how much
    material to load within that scope, computed from step 5's
-   classification: plays/review-budget.md)
+   classification by plays/review-budget.md's single entry point)
 7. validate important candidates    -> skills/security-validate
    (check chaining first: skills/attack-chain-analysis — a chain's own
    inter-step controls are themselves an adversarial-validation

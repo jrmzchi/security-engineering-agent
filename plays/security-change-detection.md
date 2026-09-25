@@ -66,7 +66,9 @@ execution, shell execution, dynamic code execution, CORS, security
 middleware, privilege changes, secret storage, external
 callbacks/webhooks, SSRF-sensitive network behavior, deserialization,
 deployment security configuration, rendering attacker-influenced data
-into HTML/DOM/a template (output encoding, XSS-adjacent)
+into HTML/DOM/a template (output encoding, XSS-adjacent), enterprise
+identity integration (SSO/OIDC, AD/LDAP directory access, Windows
+Integrated Authentication)
 ```
 
 Action: **security design required before implementation when the
@@ -118,6 +120,10 @@ Configuration:
   authentication configuration authorization configuration CORS
   configuration TLS configuration security headers package manifests
   lock files CI/CD security configuration
+
+Enterprise identity (AD/SSO):
+  the signals in plays/enterprise-identity-security.md's "When this
+  play applies" (kept there, in one place)
 ```
 
 ## Classify from intent, before code exists

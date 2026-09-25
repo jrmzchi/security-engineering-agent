@@ -14,6 +14,17 @@ These are manual/LLM-traced cases against cited authoritative text, not
 an automated test suite — there is no exit code, only a comparison
 between the play's stated rules and a case's traced result.
 
+**`[V4 Batch 3]`** Every budget level below is now produced by
+`plays/review-budget.md`'s "The single entry point" (executed by
+`tools/context_manifest/budget.py`'s `compute_review_budget()`); "computed
+at the Scope step" / "the workflow's 'Determine review budget' step" below
+name the call site that invokes it, not a separate computation. The level
+assertions of every case are also executed automatically by
+`tools/context_manifest/tests/test_batch3_review_budget.py` (which fails if a
+case in the `| N |` or `### Case N:` format is added or removed here without
+updating it); the prose-only
+guarantees are re-traced in `work/v4-planning/batch3-verification-log.md`.
+
 ## Level computation (TARGETED path, ordinary development changes)
 
 | # | Change description | Expected budget | Reason |

@@ -183,6 +183,60 @@ for d in output/scans output/reports; do
     fi
 done
 
+# --- SCOPE_COVERAGE: Group 3 play Scope vs. tools/context_manifest's ------
+# rule table, both directions (implementation-batches.md Batch 0
+# criterion 7). Unlike every category above, a SCOPE_COVERAGE hit is a
+# confirmed defect requiring a code change, not a judgment call -- see
+# plays/repository-consistency.md's SCOPE_COVERAGE entry. This script
+# delegates to the single shared Python implementation in
+# tools/context_manifest/ and does not, and must not, reimplement the
+# comparison itself (see tools/context_manifest/scope_coverage.py's own
+# module docstring) -- scripts/windows/consistency-check.ps1 calls the
+# exact same entry point.
+PYTHON_BIN=""
+for candidate in python3 python; do
+    # command -v alone is not enough: on Windows, a "python3"/"python"
+    # name on PATH can be a non-functional App Execution Alias stub
+    # (present, but exits non-zero instead of running) -- verified by
+    # actually invoking it, the same FOUND-vs-FAILED distinction
+    # scripts/windows/doctor.ps1's Test-Tool already makes for other
+    # tools. [FIXED, per independent review]: also require 3.7+ here,
+    # not just "runs at all" -- tools/context_manifest/ uses
+    # `from __future__ import annotations` throughout, which an older
+    # interpreter cannot even import, and cli.py's own version check
+    # cannot run on an interpreter unable to import cli.py in the first
+    # place (see that module's own comment) -- this probe is the only
+    # place that check can actually happen.
+    if command -v "$candidate" >/dev/null 2>&1 && \
+       "$candidate" -c "import sys; sys.exit(0 if sys.version_info >= (3, 7) else 1)" >/dev/null 2>&1; then
+        PYTHON_BIN="$candidate"
+        break
+    fi
+done
+if [ -z "$PYTHON_BIN" ]; then
+    echo "" >&2
+    echo "ERROR: Python 3 not found on PATH -- required for the SCOPE_COVERAGE check (V4 core runtime prerequisite, see tools/README.md). Run scripts/macos/doctor.sh for install guidance." >&2
+    exit 2
+fi
+# [FIXED, per a round-2 independent review Minor]: -B disables writing
+# __pycache__/*.pyc for this invocation -- without it, this check was
+# not idempotent: the first run created bytecode files that the
+# HYGIENE category above would then flag as a NEW hit on every
+# subsequent run (23 hits -> 28 hits), since compiling tools/context_manifest/
+# is itself a side effect of running this check at all.
+SCOPE_COVERAGE_OUTPUT=$(cd "$REPO_ROOT" && "$PYTHON_BIN" -B -m tools.context_manifest.cli scope-coverage-check 2>&1)
+SCOPE_COVERAGE_EXIT=$?
+if [ "$SCOPE_COVERAGE_EXIT" -eq 2 ]; then
+    echo "" >&2
+    echo "$SCOPE_COVERAGE_OUTPUT" >&2
+    echo "ERROR: SCOPE_COVERAGE check could not run." >&2
+    exit 2
+elif [ "$SCOPE_COVERAGE_EXIT" -eq 1 ]; then
+    echo ""
+    echo "$SCOPE_COVERAGE_OUTPUT"
+    HITS=$((HITS + 1))
+fi
+
 echo ""
 if [ "$HITS" -eq 0 ]; then
     echo "Result:"

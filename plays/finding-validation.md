@@ -258,6 +258,181 @@ store the detailed rejected list separately (see
 `templates/security-report.md`'s "Rejected Candidate Findings" section)
 and keep the main findings summary focused on what survived validation.
 
+## Feedback Learning — reusing a REJECTED result `[V4 Batch 1]`
+
+**Cached results are never treated as permanently correct.** Before
+this play's own procedure re-derives a REJECTED conclusion from
+scratch, check whether an existing, still-eligible Feedback record
+already covers this exact occurrence — but only skip re-derivation
+when that record passes every one of the checks below; otherwise run
+this play's procedure in full, same as if no record existed at all.
+Full field-level schema, the exact algorithm, and the acceptance test
+cases live in `work/v4-planning/context-manifest-schema.md` sections
+4/5/5.1/5.2 — this section states the procedure, not a second copy of
+that schema.
+
+```text
+1. Candidate generated (scanner hit, or this play's own manual
+   analysis) -- exactly as it would be with no Feedback store at all.
+   A Feedback record NEVER changes which candidates get generated or
+   which scanners run (tools/feedback_store/ has no code path that
+   could -- see that package's own negative-control tests).
+2. Search .security/feedback.json (tools/feedback_store/store.py) for
+   a record whose category/sink/reachabilityPath COULD match.
+3. Occurrence identity precondition (tools/feedback_store/identity.py):
+   same sink (full repository-relative path), same category, and the
+   SAME ORDERED reachabilityPath (every {path, qualifiedSymbol} hop,
+   comparing qualifiedSymbol as an exact string -- not the sink alone,
+   not just the trailing method name, not with any parameter signature
+   stripped -- a new caller reaching an old sink through a path the
+   original record never saw is a DIFFERENT occurrence, full stop).
+   `[ADDED, per the qualifiedSymbol redesign, schema-version 2]`:
+   `qualifiedSymbol` must carry enough namespace/type/signature
+   identity that two genuinely different callables can never collide
+   under it (a bare "GetReport(int)" with no enclosing type does NOT
+   suffice -- two different classes could each declare one); a hop
+   missing this, or a record built under the older schema version that
+   never had it at all (a "legacy" record), NEVER matches for reuse
+   regardless of how well everything else lines up -- go straight to
+   step 5, the same outcome as any other identity mismatch. Each hop
+   MAY also carry an optional `lineRange` -- this is evidence-location
+   metadata only, never compared here: a pure line shift at an
+   otherwise-unchanged hop (e.g. a comment inserted above it) must
+   never by itself change whether identity matches, but reaching this
+   step never grants reuse by itself either -- step 4's checks still
+   all run. Failing identity means the candidate is never compared
+   against this record at all -- go straight to step 5.
+4. Reuse eligibility (tools/feedback_store/eligibility.py), ALL FOUR
+   required, always evaluated in full even if an earlier one already
+   failed:
+   (a) `[CORRECTED, per a round-1 independent review Minor: this
+       previously said "the reachabilityPath's sink," narrower than
+       what it actually requires]` re-inspect the current code ALONG
+       THE WHOLE reachabilityPath (not the sink alone -- a record's
+       safetyPattern can, and often does, name behavior at an
+       intermediate hop, not just the terminal sink) -- does it still
+       match the record's safetyPattern, and does the candidate still
+       fall within the record's own scope (never assume; when
+       genuinely ambiguous, FAIL CLOSED -- treat as not matching);
+   (b) no invalidationConditions have become true (an UNKNOWN
+       condition state counts as true, not false, for this purpose);
+   (c) no file in dependencies changed (the ordinary diff-based
+       Selective Invalidation check, extended to Feedback records --
+       see plays/security-impact-analysis.md's "Incremental
+       invalidation" and its central-component exception, which now
+       also sweeps Feedback records for a central/load-bearing
+       change);
+   (d) re-inspect EVERY intermediate hop in reachabilityPath (not just
+       the sink) -- is the specific control each one represents still
+       present and unchanged.
+   All four passing -> REUSE the record's conclusion; do not
+   re-invoke this play's procedure. Call
+   `tools/feedback_store/store.py`'s `increment_reuse_count()` for the
+   reused record — this is what actually advances the reuseCount
+   safety valve toward its threshold; skipping this call means the
+   threshold can never be reached however many times the record is
+   reused. `[ADDED, per a round-2 independent review Minor:
+   increment_reuse_count() only mutates the in-memory store — nothing
+   in this step said the result must actually be persisted, so the
+   counter reset to whatever was last written every time the store was
+   reloaded, and could never reach the threshold across separate
+   review runs]` **This step is not complete until the incremented
+   count is actually written back** — call `store.write()` with the
+   hash `store.load()` returned earlier in this review (skip the write
+   only if step 2 already reported the store as degraded, per
+   `skills/security-review/SKILL.md` step 2's own note not to write to
+   a degraded store). Record which Feedback record ID was reused and
+   which checks were re-verified in the review's own audit trail -- a
+   reuse is never silent. `[ADDED, V4 Batch 2 preflight]` **Every
+   store mutator (`increment_reuse_count`, `mark_stale`,
+   `mark_revalidated`, `replace_rejection_record`, `append_*`) writes a
+   freshly VALIDATED COPY back into the store** (copy -> mutate ->
+   validate -> commit; a failed validation leaves the store untouched).
+   A record object you were holding BEFORE the call is therefore a
+   stale alias afterwards -- do not keep reading or passing it; re-read
+   the record from the store (`store["rejectionRecords"][record_id]`)
+   for any subsequent step, including the `decide_reuse` call in step 3
+   of a later candidate and the `write()` here.
+5. Any check above failing (or the candidate never having matched
+   identity in the first place) -> run this play's full procedure,
+   unchanged authority, exactly as if no Feedback record existed.
+6. After this play's procedure resolves the candidate:
+   - REJECTED again, with a HIGH-confidence reachabilityPath trace ->
+     `[CORRECTED, per a round-1 independent review Minor: "append a
+     NEW record" could leave TWO records with identical occurrence
+     identity around at once — one already-eligibility-failed
+     (STALE or otherwise) and one freshly appended — with nothing in
+     this step saying which one a later reuse check should even
+     consult]` if a record for this EXACT occurrence already exists
+     (whether marked STALE or not — this is the same record step 3's
+     identity check just matched, or step 4 just failed against),
+     REFRESH that record in place (`store.mark_revalidated`/
+     `replace_rejection_record`) with new evidence/lastValidation --
+     never just re-stamp the old text without actually re-deriving it,
+     and never leave the old one sitting alongside a new one. The
+     replacement record must always be built via
+     `schema.new_rejection_record()` fresh (which starts `reuseCount`
+     at 0) — `[ADDED, per a round-2 independent review Minor]` **never
+     hand-copy the old record's own fields into a new dict**, which
+     could carry the old `reuseCount` (or a stale `status`/
+     `staleReason`) forward and defeat the reuseCount safety valve
+     silently. Only append a genuinely NEW record when no record for
+     this occurrence existed at all before this candidate.
+   - REJECTED, but the trace could only reach MEDIUM/LOW confidence ->
+     do NOT cache it as a reusable record at all; it is re-derived
+     every time it recurs, which is this situation's own safe default.
+   - CONFIRMED or NEEDS_VERIFICATION where a record for this exact
+     occurrence previously said REJECTED -> that record must lose its
+     reusable status (marked STALE with the reason "re-validation
+     resolved differently"), preserving the history of what it used
+     to say rather than erasing it, but never again treated as a
+     cached "safe" conclusion.
+```
+
+**This mechanism's job is to never wrongly exempt a genuinely
+different occurrence from validation, which it achieves by construction
+-- it is not responsible for guaranteeing a new path gets discovered
+and generates a candidate in the first place; that remains this skill's
+own diff-aware workflow, unchanged.**
+
+## Feedback Learning — human-discovered false negatives `[V4 Batch 1]`
+
+When a human finds a vulnerability this system's own review missed (a
+false negative), the required response is root-cause attribution
+across four layers, not just "add one more fixture":
+
+```text
+routing         the classifier/manifest never selected the right
+                domain/play for this change at all
+attack_surface  the map was missing the entry point, control, or sink
+                involved
+cross_file_flow the flow existed in the map/domain but the multi-hop
+                trace (plays/cross-file-data-flow.md) didn't connect it
+reasoning       everything was in scope and traced correctly, but the
+                manual semantic analysis step itself missed the
+                vulnerability
+```
+
+Attribute the layer using `tools/feedback_store/attribution.py`'s
+`attribute_layer()` / `record_miss()` -- it walks the four layers in
+dependency order (routing first, since nothing downstream matters if
+the wrong domain was never even loaded) but REFUSES to attribute
+anything when a gate has no supporting evidence, rather than defaulting
+to any one layer (including "reasoning," which is not a catch-all
+bucket for ambiguous cases). Every layer's own evidence must positively
+confirm which one actually failed — never a fixed priority order
+picking whichever layer happens to be checked first.
+
+The resulting `feedback_miss` record is stored in the SAME
+`.security/feedback.json` file as rejection records, but in a SEPARATE
+collection (`missRecords`) — **a missed vulnerability is never stored
+as though it were a rejected candidate.** In this batch, a miss record
+is auditable intelligence only: it does not automatically change
+routing, the attack-surface map, a domain floor, or scanner selection.
+Acting on a recurring pattern (e.g. repeated routing misses for one
+framework's convention) still requires an ordinary, reviewed code or
+Play change — the same discipline as any other correction in this kit.
+
 ## Remediation requirements
 
 Remediation guidance attached to a finding (see `templates/finding.md`'s

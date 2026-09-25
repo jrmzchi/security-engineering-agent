@@ -175,6 +175,11 @@ effort, or for an explicit DEEP-mode/release-audit request. Move at
 most one level up or down from this default per the Factors — moving
 further than that means the factors driving it are severe enough to
 warrant explicitly saying so, not applying this table mechanically.
+`[V4 Batch 3]` Through "The single entry point" below the level itself
+stays within that one-level cap (the function clamps to it and the
+manifest validator rejects anything outside it); Factors severe enough
+to argue for more are stated explicitly in the review's notes rather
+than moving the level further.
 
 Budget and sensitivity can disagree in *degree* this way — a related,
 but not identical, precedent to `plays/security-change-detection.md`'s
@@ -307,9 +312,9 @@ and both hold.
 has its own independent entry points (its own `SKILL.md` "When to use,"
 a directly-callable subagent wrapper) — a user or agent *can* run it on
 its own outside that workflow. What this play's computation actually
-depends on is narrower: **this play's own workflow-driven computation
-point** (`plays/secure-development-workflow.md`'s "Determine review
-budget" step) only ever receives a sensitivity value from that
+depends on is narrower: **this play's workflow-driven call site**
+(`plays/secure-development-workflow.md`'s "Determine review budget"
+step, which invokes "The single entry point" below) only ever receives a sensitivity value from that
 workflow's own classification step, and an explicitly requested
 `QUICK`/`STANDARD`/`DEEP` review (`plays/code-review.md`'s "Review
 modes") never passes through that workflow step at all — see that
@@ -326,8 +331,8 @@ values already defined in "Default starting point" above — only where
 independent classifier invocation is available when an explicit
 `QUICK`/`STANDARD`/`DEEP` review is also requested, "Explicit mode"
 below's Factors-adjustment step is where a reviewer can fold that
-information in manually — it does not change which entry point computes
-the starting default.
+information in manually — it does not change which call site invokes
+"The single entry point" below or which starting point it uses.
 
 ```text
           QUICK/STANDARD/DEEP (explicit)     TARGETED (proactive workflow)
@@ -343,7 +348,8 @@ LOW       N/A, same reason                   Only a lightweight diff check
                                               unless the check surfaces
                                               something that re-classifies the
                                               change higher first.
-MODERATE  N/A, same reason                   REACHABLE — computed at
+MODERATE  N/A, same reason                   REACHABLE — the single entry
+                                              point is invoked at
                                               plays/secure-development-
                                               workflow.md's "Determine review
                                               budget" step, applied at
@@ -355,7 +361,7 @@ MODERATE  N/A, same reason                   REACHABLE — computed at
                                               Manual semantic analysis steps.
                                               Value: "Default starting point"
                                               above.
-HIGH      N/A, same reason                   REACHABLE, same entry point and
+HIGH      N/A, same reason                   REACHABLE, same call site and
                                               same three consuming steps.
                                               Value: "Default starting point"
                                               above (typically ELEVATED,
@@ -370,13 +376,13 @@ HIGH      N/A, same reason                   REACHABLE, same entry point and
                                               lower".
 ```
 
-### Explicit mode: computed directly at the Scope step, not via the workflow
+### Explicit mode: starting point and movement cap (QUICK/STANDARD/DEEP)
 
 `QUICK`/`STANDARD`/`DEEP` never reach `plays/secure-development-workflow.md`'s
 "Determine review budget" step — that step only exists on the proactive
 workflow's path. `skills/security-review/SKILL.md`'s own "Scope" step is
-the one entry point these three modes do reach, and computes a budget
-directly there, without a sensitivity input:
+where these three modes invoke "The single entry point" below, without a
+sensitivity input; the rules it applies for them are these:
 
 ```text
 QUICK (explicit)      -> FOCUSED — no sensitivity signal exists to
@@ -407,6 +413,67 @@ case 7/7b exist to test) — absent such a case, `FOCUSED`/`AUDIT` remain
 the defaults for these three modes, not derived from a sensitivity label
 that was never computed for them.
 
+## The single entry point
+
+**`[V4 Batch 3]`** Every review-budget level in this kit is computed —
+or, for a Jev-produced Context Manifest, bounded — by **one
+computation**, defined by this play and executed by one function; there
+is no second, separately described computation anywhere else in the
+kit:
+
+```text
+Inputs    review mode (TARGETED / QUICK / STANDARD / DEEP); for TARGETED
+          only, the sensitivity the (re-)classification established; the
+          Factors adjustment — a signed number of levels the reviewer's
+          own weighing of "Factors" above concluded (the function never
+          weighs the Factors itself)
+Rule      1. starting point: "Default starting point" (TARGETED, by
+             sensitivity; its LOW row is never live-applied, and the
+             function uses MINIMAL for it) or "Explicit mode"
+             (QUICK/STANDARD -> FOCUSED, DEEP -> AUDIT)
+          2. apply the Factors adjustment within the mode's movement cap:
+             at most one level either way for TARGETED; uncapped for
+             QUICK/STANDARD/DEEP (the case 7/7b downward movement)
+Output    the level; any movement below the starting point carries the
+          Factor(s) that justified it (factorsEvidence)
+Executed  tools/context_manifest/budget.py  compute_review_budget(
+          review_mode, sensitivity, factor_adjustment); the manifest
+          validator checks a declared level against the same function's
+          legal range (is_within_floor)
+```
+
+The call sites invoke this entry point and supply its inputs; none of
+them restates the tables or the cap:
+
+```text
+plays/secure-development-workflow.md   "Determine review budget" step —
+                                       TARGETED, with the re-classified
+                                       sensitivity
+skills/security-review/SKILL.md        "Scope" step — an explicit
+                                       QUICK/STANDARD/DEEP request; for a
+                                       TARGETED review it records the value
+                                       the workflow step produced
+Context Manifest producers             the built-in producer takes its
+(tools/context_manifest/)              level from the function. The Jev path
+                                       does NOT take its level from it: Jev
+                                       chooses a level, which is accepted
+                                       only inside the function's legal
+                                       range, and below the function's
+                                       caller-adjusted result only under
+                                       skills/security-review/SKILL.md step
+                                       1's named-Factor/confidence rule;
+                                       otherwise the built-in manifest with
+                                       the function's result is used. So the
+                                       function computes every non-Jev level
+                                       and bounds every Jev level
+```
+
+**Without a working Python 3 interpreter** (the only fallback condition,
+per `skills/security-review/SKILL.md`'s step 1 note) the reviewer applies
+this same rule by hand from this play's two tables and caps — the same
+rule, not a second description of it. With or without the function, "The
+floor this play cannot lower" and "Context budget" above apply unchanged.
+
 ## Output
 
 This play doesn't introduce its own artifact or finding format — its
@@ -414,7 +481,8 @@ output is a level (`MINIMAL`/`FOCUSED`/`ELEVATED`/`AUDIT`) that informs
 how much of `skills/security-review`'s workflow to actually spend, and
 how much reference material to load while doing it — see "Applicability
 matrix" above for exactly which sensitivity/mode combinations reach a
-live computation, and where. `AGENTS.md`'s "Before implementing a
+live computation, and "The single entry point" above for the one
+computation every one of them uses. `AGENTS.md`'s "Before implementing a
 meaningful software change" step 6 (proportional targeted review) names
 this play as the thing computed from step 5's (re-)classification, not
 as an input that itself refines that classification — project
