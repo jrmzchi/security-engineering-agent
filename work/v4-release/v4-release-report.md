@@ -1,5 +1,27 @@
 # V4 release completion report (2026-09-25)
 
+**Final status after the RV-29 correction and protocol revision 5: `V4_RELEASE_NOT_READY` (not pushed).**
+
+- **RV-29 correction** (`d67a81c`, corpus `v4-release-corpus/4`): a self-contained V4-release fixture whose hosting
+  path is code (`app.UseStaticFiles` publishes the upload directory). It is graded as three evidence-bound findings.
+  One independent review found no Blocker or Major; the fix-only re-review said READY.
+- **Validation** (`298fb31`, one attempt): RV-01 to RV-27 passed. It stopped at **RV-28**
+  (`v4_release/file_upload_authenticated_safe.py`, expected safe), **before RV-29 was reached**.
+  - The answer was valid and correctly bound: one CONFIRMED MEDIUM finding, a race condition (TOCTOU) upload-quota
+    bypass (`case_25.py:55-62`).
+  - The per-user cap is checked with `len(os.listdir(user_dir))` and the file is written afterwards, with no lock or
+    atomic reservation. The code confirms it.
+  - Per rule 10 it is reported, not dismissed; the fixture was not edited and the case was not rerun.
+- **Own miss, recorded:** the independent review had named this exact weakness as an open doubt before the run. I did
+  not change it, because that safe fixture was outside this batch. The revision-4 run of the same fixture had passed
+  (NOT_CONFIRMED), which also shows the one-run-per-case limit.
+- **Not reached:** RV-29 to RV-39 and all 13 enterprise-identity cases. The RV-29 fixture is therefore checked only
+  deterministically and by running it locally, not by a model review.
+- **Still holding on the final tree:** product tests (261 and 354 OK), fallbacks, feedback-record checks, consistency
+  wrappers and the privacy scan.
+
+Section 14 has the details; sections 1–13 are the earlier attempts, unchanged.
+
 **Final status after the strict safe-fixture audit and protocol revision 4: `V4_RELEASE_NOT_READY` (not pushed).**
 
 - **Audit** (`4e4e626`, corpus `v4-release-corpus/3`): all 24 expected-safe cases were re-read under a strict standard.
@@ -461,5 +483,74 @@ checked for its entry points, data sources, outputs, sensitive data and access c
   V4-release variant that includes `UseStaticFiles()`);
 - or deciding that the kit should confirm upload -> stored XSS under `wwwroot` without seeing the hosting code, and
   changing the product guidance accordingly.
+
+Either would be followed by a new validation. None of it was started here.
+
+## 14. RV-29 correction and final validation, protocol revision 5 (2026-09-25)
+
+**Starting state (checked before any change).**
+- `v4-release` HEAD `526fef5`, clean working tree.
+- Local `v3-slim` and the golden-baseline tag both at `f5502cd`.
+- `origin/v3-slim` was force-updated to `39a7b0b`, a rewritten, unrelated history: no common ancestor with
+  `f5502cd`, authorship changed. By the user's decision the release base stays the local tag. The remote is handled
+  separately; no push or history change was made.
+
+**RV-29 correction (`d67a81c`).**
+- **Fixture:** `tests/fixtures/v4_release/upload_static_hosted_program_deceptive.cs`, a single-file ASP.NET Core
+  `Program.cs`. `UploadStorage.Directory` is both the upload destination and the `PhysicalFileProvider` that
+  `app.UseStaticFiles` publishes at `/uploads`.
+- **Checked by running it:** built with .NET 8 (0 warnings, 0 errors) and run on localhost:
+  - an uploaded `x.html` is served as `text/html` with no `Content-Disposition`;
+  - the upload file name `../../escaped.txt` is written outside the directory;
+  - `/download?name=../../...` reads outside it.
+- **Manifest `/4`:** only RV-29 differs from `/3`. Its `expectedFindings` are:
+  - upload-write traversal (bound to the `Upload` action);
+  - download-read traversal (bound to the `Download` action);
+  - stored XSS (bound to both the `UseStaticFiles` block and the `Upload` action, as a separate entry).
+- **Deterministic tests:**
+  - release repo: `test_release_corpus.py`; its RV-29 hosting tests fail 4 of 5 against the V3 fixture, which has no
+    hosting code;
+  - external adapter: 33 synthetic tests, including one where the revision-4 RV-29 answer still fails;
+  - adapter mutants (binding, groups, span cap, `id` type, `rowId`, `replaces.rowId`) are all killed.
+
+**Review.**
+- **One independent review:** no Blocker or Major.
+  - Fixed: `expectedFindings` ids must be strings; every row's `rowId` / `replaces.rowId` is cross-checked against
+    the V3 mapping.
+  - Recorded: the keyword-proxy limits.
+  - The fixture was reordered, with no change in meaning, so that the hosting block and the `Upload` action fit
+    one citation of at most 30 lines. The grader was not loosened.
+- **Fix-only re-review:** READY. One residual Minor was recorded and not fixed, per the bounded cycle: a replaced
+  row's own `rowId` is not checked for uniqueness; the pinned manifest has 39 distinct values.
+- **Reviewer doubt 2, not acted on:** the RV-28 quota check is not atomic, and hard links are not detected in
+  RV-24/26/37. Those were safe fixtures outside this batch, so they were left unchanged.
+
+**Validation (protocol revision 5, `298fb31`).**
+- **Pins:** tree `d67a81c` (product code identical to `644d419`), kit export `98995885…`, manifest `8ba55ec4…`,
+  adapter `5e9c3432…`, all confirmed at initialisation.
+- **Runs:** 56 model runs, all valid; 5 result-tool calls rejected and then corrected by the runner; 0 binding
+  failures; `claude-sonnet-5`, effort `high`.
+- **Outcomes:**
+  - RV-01–RV-27: PASS.
+  - RV-28: FAILED. CONFIRMED MEDIUM, race condition (TOCTOU) upload-quota bypass, evidence `case_25.py:55-62`. The
+    code shows the check-then-write with no lock.
+- **Stop rule:** validation stopped at RV-28. No run was repeated or replaced, and no further repair cycle was
+  started.
+
+**What this shows.**
+- The same failure mode again, on a different axis. A safe fixture carried a control — the upload quota — whose
+  implementation is itself a weakness a strict review can confirm.
+- The revision-4 run passed this fixture; this one did not. That is run-to-run variation on a borderline finding with
+  bounded impact.
+
+**What it does not show.**
+- how RV-29, with the corrected fixture, and the remaining cases would score under a model review;
+- run-to-run stability.
+
+**Next (needs a new authorization).**
+- Make the RV-28 quota atomic, or remove the quota claim. The candidates are a per-user lock, or an atomic
+  reservation such as a counter file opened with `O_EXCL` per slot.
+- Make the link checks in RV-24/26/37 cover hard links, or state them as out of the tested property with the matching
+  control.
 
 Either would be followed by a new validation. None of it was started here.
