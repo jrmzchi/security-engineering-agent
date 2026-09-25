@@ -83,6 +83,21 @@ Content containing embedded scripts (e.g. an uploaded .svg or .html
     correct control. Do not use this control as a substitute for the
     web-root/script-execution control above — they address different
     halves of "executable content".
+
+Uploads stored under a directory the app serves statically (e.g.
+    ASP.NET Core wwwroot/ via StaticFiles, Express static(), a
+    Flask/Django static root) with no content-type restriction
+    -> the uploaded file is reachable at its own static URL, so an
+    uploaded .html/.svg renders on the app's origin: unrestricted upload
+    -> stored XSS (CWE-434 + CWE-79). A Content-Disposition header set
+    by a separate download handler does NOT protect it: that header
+    only applies to responses that handler sends, and a direct request
+    for the static URL never reaches it. Check which response actually
+    serves the file.
+    -> report it as its OWN finding, even when the same code also has a
+    confirmed path-traversal finding (e.g. the filename used unsanitized
+    to build the path): fixing the traversal leaves this one open, so
+    one finding must not absorb the other.
 ```
 
 ## Downloads / static serving
