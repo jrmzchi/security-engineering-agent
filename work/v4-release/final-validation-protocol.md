@@ -1,100 +1,165 @@
-# V4 final release validation — pre-registered protocol, revision 7 (2026-09-29)
+# V4 final release validation — pre-registered protocol, revision 8 (2026-09-29)
 
 Written and committed **before any model run** of this attempt. The user authorized:
-- a fix of the confirmed RV-29 product miss in the kit's guidance;
-- a local, reproducible investigation of RV-15;
-- one independent review, one fix-only re-review;
+- root-cause fixes for RV-18 and RE-08, with deterministic tests;
+- one independent review, one concentrated fix, one fix-only re-review;
 - then one complete validation of all 39 corpus and 13 enterprise-identity cases, collect-all as in revision 6.
 
-That authorizes no weaker grader, no change to RV-29's vulnerability facts or to any V3 fixture, expected result or
-historical result, no stability measurement, no Jev call and no second repair or validation cycle.
+That authorizes no weaker grader, no change to any V3 fixture, expected result or historical result, no package
+installation or network operation, no stability measurement, no Jev call, and no further repair or rerun cycle.
 
 **Release base:** the local `v3-slim-golden-baseline` tag, `f5502cdcd079a5589c39f667ebdfbb34e276aafd`.
 
 **Earlier attempts, kept as records (none is a pass):**
 - revisions 1–5 stopped at RV-02, RV-04, RV-15, RV-29 and RV-28;
-- **revision 6** (`bc7abdc`, corpus `/5`, collect-all) ran all 52 cases: 50 passed and 2 failed.
-  - RV-15: CONFIRMED LOW on express-session's default MemoryStore.
-  - RV-29: stored XSS not reported.
-  - The record is `work/v4-release/v4-release-report.md` §15, unchanged.
+- revision 6 ran 50 passed and 2 failed (RV-15, RV-29);
+- **revision 7** (`92af53c`) ran 50 passed and 2 failed: RV-18 and RE-08. Its record is
+  `work/v4-release/v4-release-report.md` §16, unchanged.
 
-## What changed
+**RV-15 stays NOT RESOLVED.** Its revision-7 pass is not a resolution. No express-session was installed. See revision
+7's "RV-15 local check" in this file at commit `92af53c`.
 
-- **RV-29 root cause:** the stored-XSS guidance already existed at `plays/file-security.md` ("Uploads"). The
-  revision-6 RV-29 runner read only the case file and `skills/security-review/SKILL.md`, and never opened the play.
-  Across the 52 revision-6 reviews, 16 read any play and 1 read `plays/file-security.md`. By the user's decision
-  (2026-09-29), the fix covers both files. These are **product guidance** changes; no product code changed:
-  - `skills/security-review/SKILL.md` step 5: reading `plays/<domain>.md` for every selected domain is mandatory
-    before step 6, at every budget level.
-  - `plays/file-security.md` "Uploads": four explicit checks for an upload written under a served directory:
-    hosting, public URL, content type, and same-origin inline rendering. Stored XSS is CONFIRMED only when all four
-    are established from code in scope. When the upload lands under a web-root-like directory but the hosting or URL
-    mapping is not in scope, the result is NEEDS_VERIFICATION naming the missing evidence; hosting is never assumed.
-  - Regression tests: `tools/context_manifest/tests/test_release_guidance_rv29.py`, plus one adapter test. The
-    adapter test shows that the revision-6 RV-29 answer still FAILS on the missing `upload-stored-xss` finding, so
-    no threshold was lowered. `caseval.py`, `caseresult.py` and `relman.py` are unchanged.
-  - **What these tests protect, and what they do not.** They fail if the SKILL paragraph or the play block is
-    removed (checked by removing each), and if the old answer would be let through. Their decision function is a
-    fixture-bound proxy of the rule. That the miss was the reviewer not reading the play cannot be reproduced
-    deterministically; whether a reviewer now applies the play is shown only by the validation run below.
-- **RV-15:** not resolved (see "RV-15 local check" below). Its fixture and its expected result ("no confirmed
-  finding") are unchanged.
-- **Corpus, fixtures, grader, adapter:** unchanged from revision 6. Corpus `/5`; `caseval.py` is the same file as in
-  revision 6 (only the adapter's tests gained the test above).
-- **Review:** one independent review found no Blocker and no Major, and said READY. By the user's procedure a
-  fix-only cycle applies to Blocker/Major only, so the reviewed guidance is committed unchanged. These Minors are
-  recorded, not fixed:
-  - The play's three "->" outcomes have no stated precedence. Case one: an upload under `wwwroot/` with a forced
-    safe extension shown in code, but no hosting in scope, matches both "NEEDS_VERIFICATION" and "a check fails".
-    Case two: a case where checks 1–2 are established but 3 or 4 is neither shown nor refuted (e.g. a custom
-    content-type provider outside the scope) has no stated outcome. No `/5` row falls into either case.
-  - The test proxy's limits, now stated in its docstring.
-  - Wording in this protocol, now corrected.
-- **Attribution caveat:** reading every selected domain's play now applies to every case. If a safe row gets a new
-  CONFIRMED in this round, that change is a possible cause to weigh when classifying it.
+## RV-18: root cause and fix
 
-## RV-15 local check (before any model run)
+**Root cause.**
+- Outside DEEP, `domains` is chosen by item 0 — the classification is a reasoning pass, and no deterministic rule sits
+  under it. The DEEP algorithm (`tools/context_manifest/domains.py`) does keep web-security for CSRF unless "never
+  uses a cookie or ambient auth for a state change" is positively confirmed, but nothing applied that rule outside
+  DEEP.
+- In revisions 6 and 7, item 0 left out `web-security` for RV-18: a cookie-authenticated account deletion reached by
+  GET, with `SameSite=Lax`.
+- Revision 6's runner read `plays/web-security.md` anyway and CONFIRMED. Revision 7's runner read only the listed
+  domains' plays and stayed "within the reviewed domains".
+- The documents allowed that reading: `plays/review-budget.md` said the domain set was "fixed", and nothing said
+  whether `domains` bounds the findings.
 
-- **Question:** does express-session, configured as in the fixture, create or keep MemoryStore records for requests,
-  when `saveUninitialized: false` is set and no route writes to the session?
-- **What the fixture shows:**
-  - it pins no version: there is no package manifest in the case, only `require('express-session')`;
-  - the configuration is `name: 'sid'`, `resave: false`, `saveUninitialized: false`, cookie `httpOnly`, `secure`,
-    `sameSite: 'lax'`, `maxAge: 30 min`, and **no `store`**;
-  - the one route only reads `req.session.userId`.
-- **Environment:** Node `v26.7.0` is installed (`node --version`). express-session is **not available locally**.
-  The method, all read-only:
-  - `which node npm`;
-  - a listing of the global module directory, which holds only `@anthropic-ai`, and of the Node installation's
-    `node_modules`, which holds only `npm`;
-  - a fixed-string search for `express-session` in the npm cache index, with 0 hits (the only related tarball is
-    `express-5.2.1.tgz`);
-  - a `find` for a directory named `express-session` under the user's documents, the global npm directory and the
-    npm `_npx` cache, with none found (the reviewer repeated a search of the user directory to depth 7, with none
-    found).
+**Decision (user, 2026-09-29).** `domains` is the **minimum** set whose plays must be read, **not a boundary** on
+findings.
+- A concrete candidate of another domain, shown by the code in scope, brings that one domain's play in.
+- A budget level never does.
+- No review loads every play.
 
-  Installing express-session needs a network download, and network operations and package installation are not
-  authorized in this round.
-- **Result: NOT RESOLVED.** No store state was observed. The row is not re-graded, and its expectation is not
-  changed.
-- **What would resolve it:** an authorized install of a stated express-session version into a scratch directory, and
-  then a local script that sends requests to the fixture's app and inspects the MemoryStore's contents.
+**Fix.**
+- **New product module** `tools/context_manifest/signal_floor.py`, a deterministic floor. Today it has one rule,
+  CSRF-AMBIENT: an ambient browser credential plus a state-changing endpoint, both in scope, requires web-security.
+  - An ambient credential is cookie authentication, a server session cookie, or Windows Integrated Authentication.
+  - A state-changing endpoint is POST/PUT/PATCH/DELETE, or a GET whose route names a state-changing action.
+  - It only adds a domain. Its patterns are a stated proxy.
+- `orchestrator.produce_manifest(scope_texts=...)` applies the floor to item 0's classification. The widened
+  classification is the floor for both producers, so the validator rejects any candidate without it.
+- SKILL step 1 says to pass `scope_texts`. SKILL step 5 states the minimum-not-boundary rule.
+  `plays/review-budget.md` and `plays/security-change-detection.md` ("Domains a signal pair requires") agree with it.
+- **Adapter:** `relman.py` now passes the case workspace's file texts as `scope_texts`, as the kit's step 1 does in
+  real use. `caseval.py` passes the workspace path and records the floor's reason per classification run. Grading is
+  unchanged.
+
+**Where the floor fires in this corpus.** Checked by a test. It fires on 5 of the 52 cases:
+- RV-18;
+- RV-28 (a Flask session and an upload POST, expected safe);
+- RE-09, RE-10 and RE-11. RE-10 is expected safe; its state-changing POST requires a custom header.
+
+That is by design: each of these has both halves of the signal pair.
+
+**Attribution caveat.** This round's changes can move any row, not only the floor rows:
+- the floor makes RV-28 and RE-10, both expected safe, read `plays/web-security.md`;
+- step 5's minimum-not-boundary rule applies to every case: a candidate of another domain brings one more play in;
+- the rewritten stable-identifier rule applies to every enterprise-identity group-mapping row.
+A result that changes relative to revision 7 is to be weighed against all three.
+
+## RE-08: trust boundary and guidance
+
+Full record: `work/v4-release/re08-group-identifier-evidence.md`.
+- **The fixture:**
+  - the group DN is a compile-time constant;
+  - the identity is the host's authenticated principal;
+  - success is granted only on membership;
+  - a lookup failure denies.
+- **Who can change what the DN names:** only a directory writer, by rename, move, or delete and recreate. A rename or
+  move fails closed. A second object with the same DN cannot exist. No request value reaches the DN.
+- **Classification:** no untrusted-attacker path, so it is not a security vulnerability. It leaves an
+  availability/configuration risk and an environment assumption.
+- **Root cause of the finding:** the play's stable-identifier rule named "display name / sAMAccountName" and "can be
+  renamed", with no rule for a unique-but-mutable name. By the user's decision (2026-09-29) the rule now separates the
+  cases:
+  - a display name is not a security identity key, so keying on one is a finding;
+  - sAMAccountName and DNs are decided by the case's trust boundary and attacker privilege:
+    - a fail-closed rename, move or delete is an availability/configuration risk;
+    - control over the directory object is an environment assumption;
+    - a security finding needs an ambiguous match across scopes, a wrong identity mapping, an authorization bypass,
+      or a breach of an explicit policy to be shown.
+- **General authorization rules are unchanged.** The test file checks that "any signed-in user", group-claim overage
+  and the fail-open lookup rules are still present.
+
+## Tests
+
+- `tools/context_manifest/tests/test_release_rv18_re08.py`, 16 tests. They cover:
+  - the floor on RV-18;
+  - that both halves are needed;
+  - that the halves may sit in different files;
+  - general, non-RV-18 cases, positive and negative;
+  - the exact set of corpus cases where the floor fires;
+  - input checks;
+  - `produce_manifest` with and without `scope_texts`;
+  - that the floor never removes a domain;
+  - that a manifest without the floor domain fails validation;
+  - the SKILL, budget, change-detection and web-security play text;
+  - RE-08's trust-boundary facts in the fixture;
+  - the new identity-rule text, with the unchanged rules still present.
+- **Mutants killed:** floor union removed from the orchestrator; rule firing on one half; SKILL minimum paragraph
+  removed; play rule reverted.
+- **Adapter tests:** relman passes the workspace (a CSRF pair reaches the manifest; an empty workspace is a
+  manifest problem).
+- **What the tests do not show:** that a reviewer now reads `plays/web-security.md` and confirms RV-18. The manifest
+  now carries web-security, and step 5 makes its play mandatory, but whether the reviewer then confirms it is shown
+  only by the validation run.
+
+## Review
+
+One independent review found no Blocker and no Major, and said READY.
+
+**Fixed in the one concentrated fix:**
+- **Docs that still read `domains` as a boundary:** `plays/secure-development-workflow.md` "Targeted review",
+  `plays/scanner-selection.md` and the bold sentence in `plays/review-budget.md` now point to step 5's
+  minimum-not-boundary rule.
+- **The attribution caveat above** now covers every row.
+- **Smaller wording fixes:**
+  - SKILL step 1's pronoun;
+  - the RE-08 record now marks the out-of-case `IDirectoryGroups` behaviour after a rename as an environment
+    assumption;
+  - the RV-15 pointer now names commit `92af53c`.
+
+**Recorded, not fixed:**
+- A caller that passes `scanner_selection` must account for the floor's domain, otherwise production fails loudly.
+  This is documented in `signal_floor.py`; the harness passes none.
+- The floor's known misses and false fires are listed in its docstring, including the Django half that never pairs.
+  The patterns were not widened, because that would change the pinned fire set.
+- The audit cannot tell "floor not evaluated" from "evaluated, nothing added".
+- **Open question for the user, not changed:** in TARGETED mode with NONE sensitivity, the floor scans whole files
+  and can add web-security, bypassing the "nothing to decide" shortcut. This round runs STANDARD.
+
+One fix-only re-review followed.
 
 ## Pins
 
 | Item | Value |
 |---|---|
-| Tree validated | `b92b1efe2d177fde258dd53a6d02f8a8581aadff`: relative to revision 6, the commit changes only `skills/security-review/SKILL.md` (step 5) and `plays/file-security.md` ("Uploads") and adds `tools/context_manifest/tests/test_release_guidance_rv29.py`. Product Python code is identical to `644d419` |
-| Kit export | tree sha256 `60090969f012b763eed97f50f8cfc606fadba001c9e9885f4703a88b048372a9` (**new**: the kit contains the changed skill and play). It is checked at initialisation; a different value stops the run |
-| Corpus manifest | `tests/validation/v4-release-corpus-v5-manifest.json`, `v4-release-corpus/5`, sha256 `ffab03e8ff549ca0214338f1beed743f83a9ea77a034e83a6e3e23e61432f741` (unchanged), read from the pinned commit |
+| Tree validated | `315af46758de82381b70a14b2be945d2c9aec9bc` |
+| Product code changed relative to revision 7 | `tools/context_manifest/signal_floor.py` (new), `tools/context_manifest/orchestrator.py` (the optional `scope_texts`) |
+| Guidance changed relative to revision 7 | `skills/security-review/SKILL.md`, `plays/review-budget.md`, `plays/security-change-detection.md`, `plays/enterprise-identity-security.md`, `tools/README.md` |
+| Kit export | tree sha256 `b90751e370dee58eab8ca4a8690219aa371f6c8b71b64c9ecbeacb428b9b00d7` (new). It is checked at initialisation; a different value stops the run |
+| Corpus manifest | `tests/validation/v4-release-corpus-v5-manifest.json`, `v4-release-corpus/5`, sha256 `ffab03e8ff549ca0214338f1beed743f83a9ea77a034e83a6e3e23e61432f741` (unchanged) |
 | Expected results | `expected-results.md` `2fac68d5...`; `v4-release-corpus.md` `b6e6d6a9...`; `v4-enterprise-identity-expected-results.md` `320581bc...` (all unchanged) |
+| Fixtures | unchanged since revision 6 (corpus `/5`) |
 | Runner | restricted `claude -p` (CLI `2.1.282`), `--model sonnet` (`claude-sonnet-5`), effort `high`, Read/Grep/Glob + the result tool, no shell |
 | Structured-channel library | `v4-planning` at `72dadd1`, read-only; sha256 `ca5476b7eb684ed3d2d2ac48e965dd7d1c3ea27185edaace6381cb5295d412fd` |
-| External adapter (local, not shipped) | `caseval.py` `d5a9517b8dc87a320426cae6cdf58c3f255da4b33376cf52f6761d1ae4d4d564` (unchanged), `caseresult.py` `42eb03657c6b4dd8a4b59ecff9b27558df892baa0798a3871312efcc97033b00`, `relman.py` `6e18acc02f8c847d3394d1374afc1e22c26df0aff82bd705af3fa6d47aa79d7d` (LF-normalized); run with `CASEVAL_CORPUS_MANIFEST=tests/validation/v4-release-corpus-v5-manifest.json` and `CASEVAL_CORPUS_VERSION=v4-release-corpus/5` |
+| External adapter (local, not shipped) | `caseval.py` `15e0dbb14b3ce953311c8132d4895d0b95327dc6fa65b8a2542684081ca6dea2`, `caseresult.py` `42eb03657c6b4dd8a4b59ecff9b27558df892baa0798a3871312efcc97033b00` (unchanged), `relman.py` `55c307b741ed7985cdee659798082a576613ec0f04ebe96e3fd3628415596f23` (LF-normalized); run with `CASEVAL_CORPUS_MANIFEST=tests/validation/v4-release-corpus-v5-manifest.json` and `CASEVAL_CORPUS_VERSION=v4-release-corpus/5` |
 | Jev | not called in this phase |
 
-**Stop rule for this round (user, 2026-09-29):** the validation runs collect-all (rule 7). If any case fails, the
-result is `V4_RELEASE_NOT_READY` and no further repair or rerun cycle is opened.
+**Stop rule for this round (user, 2026-09-29):**
+- The validation runs collect-all (rule 7).
+- If any case fails, the result is `V4_RELEASE_NOT_READY`, the results are kept, and no further repair or rerun cycle
+  is opened.
+- RV-15's unknown status is not reported as resolved, whatever its outcome.
 
 ## Rules
 
@@ -205,5 +270,5 @@ result is `V4_RELEASE_NOT_READY` and no further repair or rerun cycle is opened.
 
 **Result rule.** All 52 cases (39 rows of `v4-release-corpus/5` + 13 enterprise-identity rows) must pass. Any
 `FAILED` or `NOT_OBTAINED` case, or a hard stop, makes the gate `NOT_MET`. Beyond that, the product unit tests, fallback checks, review gate and privacy
-scan must still hold on the validated tree (product Python code identical to `644d419`; the skill and play changed as above) for `V4_RELEASE_READY`. Anything else is `V4_RELEASE_NOT_READY`, with no further
+scan must still hold on the validated tree (product code as listed under Pins) for `V4_RELEASE_READY`. Anything else is `V4_RELEASE_NOT_READY`, with no further
 repair or validation cycle.
