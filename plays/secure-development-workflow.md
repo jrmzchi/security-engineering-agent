@@ -53,6 +53,11 @@ Completion
 
 ```text
 NONE     -> stop here. No design, no review, no scanner, no summary.
+            One exception: when the scope shows both an ambient browser
+            credential and a state-changing endpoint (plays/security-
+            change-detection.md "Domains a signal pair requires"), build
+            the manifest as TARGETED and review web-security only (read
+            its play), at the MINIMAL budget. No design step.
 LOW      -> lightweight diff check only (plays/security-change-detection.md).
 MODERATE -> targeted review: load only the relevant play(s)/reference(s);
             also check skills/security-design's own activation list

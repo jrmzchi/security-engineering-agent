@@ -189,5 +189,53 @@ class Re08TrustBoundaryTests(unittest.TestCase):
             self.assertIn(kept, play)
 
 
+class TargetedNoneFloorTests(unittest.TestCase):
+    """User decision (2026-09-29): the CSRF floor applies in TARGETED mode even at NONE sensitivity."""
+    NONE = Classification(sensitivity="NONE", implicated_domains=frozenset())
+
+    class _RaisingClient:
+        def system_one(self, *args, **kwargs):
+            raise RuntimeError("fake client: no network in tests")
+
+    def produce(self, texts, token):
+        return orchestrator.produce_manifest(review_mode="TARGETED", classification=self.NONE, target_change_files=["a.cs"],
+                                             scope_texts=texts, token_provider=lambda: token,
+                                             client_factory=lambda t: self._RaisingClient())
+
+    def test_both_signals_put_web_security_in_a_none_manifest(self):
+        for token in (None, "fake-token"):
+            with self.subTest(token=bool(token)):
+                res = self.produce({"a.cs": _code(RV18)}, token)
+                self.assertEqual(res.manifest["domains"], ["web-security"])
+                self.assertEqual(res.manifest["sensitivity"], "NONE")
+                self.assertTrue(res.manifest["validity"]["passed"])
+                self.assertNotEqual(res.audit.get("stage"), "not_applicable")   # the NONE shortcut is not taken
+
+    def test_missing_either_signal_adds_nothing_and_keeps_the_none_shortcut(self):
+        code = _code(RV18)
+        no_ambient = code.replace("services.ConfigureApplicationCookie(", "services.Configure(")
+        no_state_change = code.replace('[HttpGet("delete")]', '[HttpGet("profile")]')
+        for name, text in (("no ambient credential", no_ambient), ("no state-changing endpoint", no_state_change)):
+            with self.subTest(case=name):
+                res = self.produce({"a.cs": text}, "fake-token")
+                self.assertEqual(res.manifest["domains"], [])
+                self.assertEqual(res.audit.get("stage"), "not_applicable")
+                self.assertNotIn("signalFloor", res.audit)
+
+    def test_the_documents_state_the_none_case(self):
+        self.assertIn("even to a `NONE` classification", _flat(_read("plays", "review-budget.md")))
+        self.assertIn("whatever the sensitivity, NONE included", _flat(_read("plays", "security-change-detection.md")))
+        self.assertIn("at every sensitivity, NONE included", _flat(_read("tools", "context_manifest", "signal_floor.py")))
+        # the workflow's NONE stop carries the same exception, so the floor is reachable from the workflow too
+        wf = _flat(_read("plays", "secure-development-workflow.md"))
+        self.assertIn("One exception: when the scope shows both an ambient browser credential and a state-changing "
+                      "endpoint", wf)
+        self.assertIn("review web-security only (read its play), at the MINIMAL budget", wf)
+        cd = _flat(_read("plays", "security-change-detection.md"))
+        self.assertIn("**One exception:** when the scope shows both halves of a signal pair", cd)
+        self.assertIn("with one signal-pair exception for NONE", _read("AGENTS.md"))
+        self.assertIn("signal-pair exception", _flat(_read("CLAUDE.md")))
+
+
 if __name__ == "__main__":
     unittest.main()

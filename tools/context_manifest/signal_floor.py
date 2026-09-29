@@ -6,6 +6,9 @@ every rule is a named pair of explicit signals that must BOTH appear in the revi
 domain. Nothing here removes a domain, and a scope that matches no rule adds nothing, so this never turns into
 "every review loads every play".
 
+It applies in every non-DEEP mode and at every sensitivity, NONE included (user decision, 2026-09-29): when both
+signals are present, web-security is a required domain even for a TARGETED change classified NONE.
+
 The one rule today mirrors DEEP's own applicability rule for CSRF (domains.py, `_web_ruled_out`: web-security stays
 applicable unless `never_uses_cookie_or_ambient_auth_for_state_change` is positively confirmed):
 

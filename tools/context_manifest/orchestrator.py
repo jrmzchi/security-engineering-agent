@@ -265,7 +265,11 @@ def produce_manifest(
 
     # 1a. Nothing to decide: a NONE-sensitivity change with no implicated
     #     domain has no live review (plays/review-budget.md's Applicability
-    #     matrix), so there is no routing/budget/priority decision for Jev
+    #     matrix). When the caller passed `scope_texts`, `floor` already
+    #     includes step 0a's signal-floor domains, so a NONE change whose
+    #     scope shows the CSRF signal pair is NOT
+    #     taken here: it has web-security to review. Otherwise there is no
+    #     routing/budget/priority decision for Jev
     #     to contribute to. Calling it would be the "unnecessary
     #     invocation" measurement-plan.md's T1 exists to catch. Recorded
     #     as `no_token` (= "Jev not invoked", see the module docstring)

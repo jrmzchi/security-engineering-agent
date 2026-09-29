@@ -345,7 +345,8 @@ NONE      N/A — sensitivity not computed     No live review exists to scope:
           "Explicit mode" below              action is "no security workflow...
                                               do not run a scanner, do not load
                                               a play." The NONE row above is a
-                                              lookup definition, never applied.
+                                              lookup definition, never applied —
+                                              except as in the note below.
 LOW       N/A, same reason                   Only a lightweight diff check
                                               runs, not a formal targeted
                                               review — no live review to scope
@@ -379,6 +380,12 @@ HIGH      N/A, same reason                   REACHABLE, same call site and
                                               "The floor this play cannot
                                               lower".
 ```
+
+**`[V4 release]` NONE with the CSRF signal pair.** When the scope shows both an ambient browser
+credential and a state-changing endpoint, `tools/context_manifest/signal_floor.py` adds `web-security`, even to a
+`NONE` classification. The manifest then carries that domain at the NONE row's `MINIMAL` budget, and the review of it
+is live: its play is read (`skills/security-review/SKILL.md` step 5). The floor only adds the domain; it confirms
+nothing. A `NONE` change without both signals still has no live review.
 
 ### Explicit mode: starting point and movement cap (QUICK/STANDARD/DEEP)
 

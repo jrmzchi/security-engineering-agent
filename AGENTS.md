@@ -100,7 +100,7 @@ to how security-sensitive it turns out to be:
 ```
 
 Full workflow, proportionality rules, and why NONE/LOW changes get none
-of this: `plays/secure-development-workflow.md`. Keep this list as the
+of this (with one signal-pair exception for NONE): `plays/secure-development-workflow.md`. Keep this list as the
 routing summary — do not copy the detailed rules from that play into
 this file.
 

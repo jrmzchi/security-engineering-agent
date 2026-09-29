@@ -17,7 +17,12 @@ behavior change
 ```
 
 Action: **no security workflow.** Do not run a scanner, do not load a
-play, do not produce a security summary for this change.
+play, do not produce a security summary for this change. **One
+exception:** when the scope shows both halves of a signal pair in
+"Domains a signal pair requires" below, the pair's domain is still
+required. Build the manifest as TARGETED and review that domain only
+(read its play), at the MINIMAL budget. The pair adds that one domain;
+it confirms nothing.
 
 ### LOW
 
@@ -93,8 +98,8 @@ it applies to individual findings there.
 
 Choosing `domains` is item 0's own reasoning, and the domains are a
 minimum (see `skills/security-review/SKILL.md` step 5). Some pairs of
-signals require a domain whatever else the scope does. When both halves
-appear, include the domain:
+signals require a domain whatever else the scope does, and whatever the
+sensitivity, NONE included. When both halves appear, include the domain:
 
 ```text
 ambient browser credential           + state-changing endpoint
