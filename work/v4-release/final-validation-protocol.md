@@ -1,165 +1,97 @@
-# V4 final release validation — pre-registered protocol, revision 8 (2026-09-29)
+# V4 final release validation — pre-registered protocol, revision 9 (2026-09-29)
 
 Written and committed **before any model run** of this attempt. The user authorized:
-- root-cause fixes for RV-18 and RE-08, with deterministic tests;
-- one independent review, one concentrated fix, one fix-only re-review;
-- then one complete validation of all 39 corpus and 13 enterprise-identity cases, collect-all as in revision 6.
+- one local, isolated express-session check for RV-15;
+- the decision that the CSRF signal floor also applies in TARGETED mode at NONE sensitivity, with tests;
+- one independent review, and a fix-only re-review if it finds a Blocker/Major;
+- then, because the kit hash changes, one complete validation of all 39 corpus and 13 enterprise-identity cases,
+  collect-all as in revision 6.
 
-That authorizes no weaker grader, no change to any V3 fixture, expected result or historical result, no package
-installation or network operation, no stability measurement, no Jev call, and no further repair or rerun cycle.
+That authorizes no push, no merge, no tag, no history rewrite, no other network use, no stability measurement, no
+Jev call, and no further repair or rerun cycle.
 
-**Release base:** the local `v3-slim-golden-baseline` tag, `f5502cdcd079a5589c39f667ebdfbb34e276aafd`.
+**Release base:** the local `v3-slim-golden-baseline` tag, `f5502cdcd079a5589c39f667ebdfbb34e276aafd`. Remote history
+is not handled in this round.
 
-**Earlier attempts, kept as records (none is a pass):**
+**Earlier attempts, kept as records:**
 - revisions 1–5 stopped at RV-02, RV-04, RV-15, RV-29 and RV-28;
-- revision 6 ran 50 passed and 2 failed (RV-15, RV-29);
-- **revision 7** (`92af53c`) ran 50 passed and 2 failed: RV-18 and RE-08. Its record is
-  `work/v4-release/v4-release-report.md` §16, unchanged.
+- revisions 6 and 7 each passed 50 of 52;
+- **revision 8** (`b561c4c`) passed 52 of 52: gate MET, `V4_RELEASE_READY` by its result rule. Its record is
+  `work/v4-release/v4-release-report.md` §17, unchanged.
 
-**RV-15 stays NOT RESOLVED.** Its revision-7 pass is not a resolution. No express-session was installed. See revision
-7's "RV-15 local check" in this file at commit `92af53c`.
+## What changed
 
-## RV-18: root cause and fix
+**RV-15 — local check done:** `work/v4-release/rv15-local-check.md`.
+- **Versions:** express-session **1.19.0** (pinned exactly) and express 5.2.1, installed with `--ignore-scripts` in
+  an isolated scratch directory outside the repository, on Node v26.7.0.
+- **Input:** the fixture, unchanged: blob `cb20c3a8`, the same as the committed file.
+- **Result:** 515 requests per transport (plain HTTP, and simulated TLS for the fixture's `secure` cookie) created or
+  kept **0** MemoryStore records. There were no `set`, `touch` or `destroy` calls and 0 Set-Cookie headers.
+  - 50 of the requests carried a cookie validly signed with the fixture's own secret, for a session that does not
+    exist. Each caused one `get` on the fixture's own store; still nothing was saved.
+  - Two positive controls stored 50 of 50, showing the instrumentation works.
+- **Conclusion, for that version only:** RV-15's revision-6 "session flooding" finding does not reproduce, so it was a
+  review false positive. No fixture or expectation changed, and no historical result is rewritten.
 
-**Root cause.**
-- Outside DEEP, `domains` is chosen by item 0 — the classification is a reasoning pass, and no deterministic rule sits
-  under it. The DEEP algorithm (`tools/context_manifest/domains.py`) does keep web-security for CSRF unless "never
-  uses a cookie or ambient auth for a state change" is positively confirmed, but nothing applied that rule outside
-  DEEP.
-- In revisions 6 and 7, item 0 left out `web-security` for RV-18: a cookie-authenticated account deletion reached by
-  GET, with `SameSite=Lax`.
-- Revision 6's runner read `plays/web-security.md` anyway and CONFIRMED. Revision 7's runner read only the listed
-  domains' plays and stayed "within the reviewed domains".
-- The documents allowed that reading: `plays/review-budget.md` said the domain set was "fixed", and nothing said
-  whether `domains` bounds the findings.
+**Signal floor at TARGETED / NONE** (user decision, 2026-09-29).
+- **Checked:** the floor already applies. The orchestrator's step 0a widens item 0's classification before the NONE
+  shortcut (1a) and before both producers and the validator. So a NONE change with both signals gets web-security,
+  and the shortcut is not taken.
+- **No product code behaviour changed.** Edited: a comment in `orchestrator.py`, the `signal_floor.py` docstring,
+  `plays/review-budget.md` (the NONE note after the Applicability matrix) and `plays/security-change-detection.md`
+  ("whatever the sensitivity, NONE included").
+- **Workflow reachability** (review Major, fixed): the workflow's NONE stop came before the manifest step, so the floor
+  was unreachable from the workflow. `plays/secure-development-workflow.md` ("NONE -> stop here") and
+  `plays/security-change-detection.md`'s NONE action now carry one exception: when the scope shows both halves of the
+  signal pair, the manifest is built as TARGETED and only that domain is reviewed (its play read), at MINIMAL budget.
+  `AGENTS.md` and `CLAUDE.md` point to that exception. Sensitivity is not raised, no design step runs, and no other
+  play is loaded.
+- **New tests** in `tools/context_manifest/tests/test_release_rv18_re08.py`:
+  - **positive:** TARGETED/NONE with both signals gives web-security, with and without a token. With a token, the
+    NONE shortcut is not taken; without one, the no-token path is reached first;
+  - **negative:** missing either signal adds nothing, and the shortcut is still taken;
+  - **document assertions,** including the NONE exception in all four documents.
+  The mutant "floor skipped at NONE" is killed.
+- `domains` stays a minimum, not a boundary (SKILL step 5). The floor still adds only web-security, and only on the
+  signal pair.
 
-**Decision (user, 2026-09-29).** `domains` is the **minimum** set whose plays must be read, **not a boundary** on
-findings.
-- A concrete candidate of another domain, shown by the code in scope, brings that one domain's play in.
-- A budget level never does.
-- No review loads every play.
-
-**Fix.**
-- **New product module** `tools/context_manifest/signal_floor.py`, a deterministic floor. Today it has one rule,
-  CSRF-AMBIENT: an ambient browser credential plus a state-changing endpoint, both in scope, requires web-security.
-  - An ambient credential is cookie authentication, a server session cookie, or Windows Integrated Authentication.
-  - A state-changing endpoint is POST/PUT/PATCH/DELETE, or a GET whose route names a state-changing action.
-  - It only adds a domain. Its patterns are a stated proxy.
-- `orchestrator.produce_manifest(scope_texts=...)` applies the floor to item 0's classification. The widened
-  classification is the floor for both producers, so the validator rejects any candidate without it.
-- SKILL step 1 says to pass `scope_texts`. SKILL step 5 states the minimum-not-boundary rule.
-  `plays/review-budget.md` and `plays/security-change-detection.md` ("Domains a signal pair requires") agree with it.
-- **Adapter:** `relman.py` now passes the case workspace's file texts as `scope_texts`, as the kit's step 1 does in
-  real use. `caseval.py` passes the workspace path and records the floor's reason per classification run. Grading is
-  unchanged.
-
-**Where the floor fires in this corpus.** Checked by a test. It fires on 5 of the 52 cases:
-- RV-18;
-- RV-28 (a Flask session and an upload POST, expected safe);
-- RE-09, RE-10 and RE-11. RE-10 is expected safe; its state-changing POST requires a custom header.
-
-That is by design: each of these has both halves of the signal pair.
-
-**Attribution caveat.** This round's changes can move any row, not only the floor rows:
-- the floor makes RV-28 and RE-10, both expected safe, read `plays/web-security.md`;
-- step 5's minimum-not-boundary rule applies to every case: a candidate of another domain brings one more play in;
-- the rewritten stable-identifier rule applies to every enterprise-identity group-mapping row.
-A result that changes relative to revision 7 is to be weighed against all three.
-
-## RE-08: trust boundary and guidance
-
-Full record: `work/v4-release/re08-group-identifier-evidence.md`.
-- **The fixture:**
-  - the group DN is a compile-time constant;
-  - the identity is the host's authenticated principal;
-  - success is granted only on membership;
-  - a lookup failure denies.
-- **Who can change what the DN names:** only a directory writer, by rename, move, or delete and recreate. A rename or
-  move fails closed. A second object with the same DN cannot exist. No request value reaches the DN.
-- **Classification:** no untrusted-attacker path, so it is not a security vulnerability. It leaves an
-  availability/configuration risk and an environment assumption.
-- **Root cause of the finding:** the play's stable-identifier rule named "display name / sAMAccountName" and "can be
-  renamed", with no rule for a unique-but-mutable name. By the user's decision (2026-09-29) the rule now separates the
-  cases:
-  - a display name is not a security identity key, so keying on one is a finding;
-  - sAMAccountName and DNs are decided by the case's trust boundary and attacker privilege:
-    - a fail-closed rename, move or delete is an availability/configuration risk;
-    - control over the directory object is an environment assumption;
-    - a security finding needs an ambiguous match across scopes, a wrong identity mapping, an authorization bypass,
-      or a breach of an explicit policy to be shown.
-- **General authorization rules are unchanged.** The test file checks that "any signed-in user", group-claim overage
-  and the fail-open lookup rules are still present.
-
-## Tests
-
-- `tools/context_manifest/tests/test_release_rv18_re08.py`, 16 tests. They cover:
-  - the floor on RV-18;
-  - that both halves are needed;
-  - that the halves may sit in different files;
-  - general, non-RV-18 cases, positive and negative;
-  - the exact set of corpus cases where the floor fires;
-  - input checks;
-  - `produce_manifest` with and without `scope_texts`;
-  - that the floor never removes a domain;
-  - that a manifest without the floor domain fails validation;
-  - the SKILL, budget, change-detection and web-security play text;
-  - RE-08's trust-boundary facts in the fixture;
-  - the new identity-rule text, with the unchanged rules still present.
-- **Mutants killed:** floor union removed from the orchestrator; rule firing on one half; SKILL minimum paragraph
-  removed; play rule reverted.
-- **Adapter tests:** relman passes the workspace (a CSRF pair reaches the manifest; an empty workspace is a
-  manifest problem).
-- **What the tests do not show:** that a reviewer now reads `plays/web-security.md` and confirms RV-18. The manifest
-  now carries web-security, and step 5 makes its play mandatory, but whether the reviewer then confirms it is shown
-  only by the validation run.
+**Corpus, fixtures, grader, adapter:** unchanged from revision 8.
 
 ## Review
 
-One independent review found no Blocker and no Major, and said READY.
-
-**Fixed in the one concentrated fix:**
-- **Docs that still read `domains` as a boundary:** `plays/secure-development-workflow.md` "Targeted review",
-  `plays/scanner-selection.md` and the bold sentence in `plays/review-budget.md` now point to step 5's
-  minimum-not-boundary rule.
-- **The attribution caveat above** now covers every row.
-- **Smaller wording fixes:**
-  - SKILL step 1's pronoun;
-  - the RE-08 record now marks the out-of-case `IDirectoryGroups` behaviour after a rename as an environment
-    assumption;
-  - the RV-15 pointer now names commit `92af53c`.
-
-**Recorded, not fixed:**
-- A caller that passes `scanner_selection` must account for the floor's domain, otherwise production fails loudly.
-  This is documented in `signal_floor.py`; the harness passes none.
-- The floor's known misses and false fires are listed in its docstring, including the Django half that never pairs.
-  The patterns were not widened, because that would change the pinned fire set.
-- The audit cannot tell "floor not evaluated" from "evaluated, nothing added".
-- **Open question for the user, not changed:** in TARGETED mode with NONE sensitivity, the floor scans whole files
-  and can add web-security, bypassing the "nothing to decide" shortcut. This round runs STANDARD.
-
-One fix-only re-review followed.
+- **Independent review:** one Major, fixed in the one concentrated fix — the NONE exception above.
+- **Also fixed:**
+  - the RV-15 record's signer version (express-session's own cookie-signature is 1.0.7);
+  - a validly-signed-cookie scenario added to the RV-15 check (above);
+  - the Result rule's pointer (the product-code row below);
+  - the positive test's wording;
+  - the orchestrator comment's `scope_texts` condition.
+- **Recorded:** the RV-15 conclusion also follows from the code alone (`saveUninitialized: false`, no route writes the
+  session); the behavioural check confirms it for the tested versions.
+- **Fix-only re-review:** READY, with no new Blocker/Major. Recorded, not fixed, per the bounded cycle; both Minors
+  concern only the TARGETED/NONE path, which this STANDARD validation does not exercise:
+  - **Minor:** the NONE exception is triggered when "the scope shows" the pair. It does not yet require running
+    `signal_floor.required_domains()` on the scope, so an agent that misses the pair still stops at NONE.
+  - **Minor:** the NONE exception does not say how it relates to the NONE row's "no scanner / no summary". The
+    exception's manifest selects semgrep, and "No security theater" has no outlet for a finding from that review.
+  - **Nit:** `CLAUDE.md` says "that play's" after naming the skill.
 
 ## Pins
 
 | Item | Value |
 |---|---|
-| Tree validated | `315af46758de82381b70a14b2be945d2c9aec9bc` |
-| Product code changed relative to revision 7 | `tools/context_manifest/signal_floor.py` (new), `tools/context_manifest/orchestrator.py` (the optional `scope_texts`) |
-| Guidance changed relative to revision 7 | `skills/security-review/SKILL.md`, `plays/review-budget.md`, `plays/security-change-detection.md`, `plays/enterprise-identity-security.md`, `tools/README.md` |
-| Kit export | tree sha256 `b90751e370dee58eab8ca4a8690219aa371f6c8b71b64c9ecbeacb428b9b00d7` (new). It is checked at initialisation; a different value stops the run |
+| Tree validated | `fe3f6462d9835f00446f1a23f6c2904979e6c08c`: relative to revision 8, only the comment/docstring/guidance edits and tests above, plus the RV-15 record |
+| Product code changed relative to revision 8 | none in behaviour: a comment in `tools/context_manifest/orchestrator.py` and the `tools/context_manifest/signal_floor.py` docstring. Guidance changed: `plays/review-budget.md`, `plays/security-change-detection.md`, `plays/secure-development-workflow.md`, `AGENTS.md`, `CLAUDE.md`. Code otherwise as in revision 8 (`315af46`) |
+| Kit export | tree sha256 `812115b5d6bee4e525d50ae16d80278d776a5668322fd43a29fc6b9ae35137f2` (changed only because of the guidance and comment text). It is checked at initialisation; a different value stops the run |
 | Corpus manifest | `tests/validation/v4-release-corpus-v5-manifest.json`, `v4-release-corpus/5`, sha256 `ffab03e8ff549ca0214338f1beed743f83a9ea77a034e83a6e3e23e61432f741` (unchanged) |
 | Expected results | `expected-results.md` `2fac68d5...`; `v4-release-corpus.md` `b6e6d6a9...`; `v4-enterprise-identity-expected-results.md` `320581bc...` (all unchanged) |
-| Fixtures | unchanged since revision 6 (corpus `/5`) |
 | Runner | restricted `claude -p` (CLI `2.1.282`), `--model sonnet` (`claude-sonnet-5`), effort `high`, Read/Grep/Glob + the result tool, no shell |
 | Structured-channel library | `v4-planning` at `72dadd1`, read-only; sha256 `ca5476b7eb684ed3d2d2ac48e965dd7d1c3ea27185edaace6381cb5295d412fd` |
-| External adapter (local, not shipped) | `caseval.py` `15e0dbb14b3ce953311c8132d4895d0b95327dc6fa65b8a2542684081ca6dea2`, `caseresult.py` `42eb03657c6b4dd8a4b59ecff9b27558df892baa0798a3871312efcc97033b00` (unchanged), `relman.py` `55c307b741ed7985cdee659798082a576613ec0f04ebe96e3fd3628415596f23` (LF-normalized); run with `CASEVAL_CORPUS_MANIFEST=tests/validation/v4-release-corpus-v5-manifest.json` and `CASEVAL_CORPUS_VERSION=v4-release-corpus/5` |
+| External adapter (local, not shipped) | `caseval.py` `15e0dbb14b3ce953311c8132d4895d0b95327dc6fa65b8a2542684081ca6dea2`, `caseresult.py` `42eb03657c6b4dd8a4b59ecff9b27558df892baa0798a3871312efcc97033b00`, `relman.py` `55c307b741ed7985cdee659798082a576613ec0f04ebe96e3fd3628415596f23` (all unchanged, LF-normalized); run with `CASEVAL_CORPUS_MANIFEST=tests/validation/v4-release-corpus-v5-manifest.json` and `CASEVAL_CORPUS_VERSION=v4-release-corpus/5` |
 | Jev | not called in this phase |
 
-**Stop rule for this round (user, 2026-09-29):**
-- The validation runs collect-all (rule 7).
-- If any case fails, the result is `V4_RELEASE_NOT_READY`, the results are kept, and no further repair or rerun cycle
-  is opened.
-- RV-15's unknown status is not reported as resolved, whatever its outcome.
+**Stop rule for this round (user, 2026-09-29):** the validation runs collect-all (rule 7). If any case fails, the
+result is `V4_RELEASE_NOT_READY`, the results are kept, and no second repair or stability cycle is started.
 
 ## Rules
 
