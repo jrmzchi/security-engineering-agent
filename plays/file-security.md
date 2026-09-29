@@ -102,6 +102,45 @@ Uploads stored under a directory the app serves statically (e.g.
     confirmed path-traversal finding (e.g. the filename used unsanitized
     to build the path): fixing the traversal leaves this one open, so
     one finding must not absorb the other.
+
+Whenever an upload is written under a web root or another directory the
+    code names as served (e.g. wwwroot/, public/, static/), or under any
+    directory that code in the review scope serves, work through these
+    four checks before deciding the stored-XSS finding. Never skip them
+    because a path-traversal finding on the same code was already
+    written. (An upload stored outside any web root, with nothing in the
+    review scope serving that directory, gets no stored-XSS finding; the
+    other upload checks above still apply.)
+    1. Hosting -- the code or configuration that serves that directory:
+       app.UseStaticFiles(...) (the default web root, or its
+       FileProvider), express.static(dir), a Flask/Django static root,
+       or a web-server alias or virtual directory.
+    2. Public URL -- the request path where a stored upload is reached:
+       the storage path mapped through that configuration's prefix
+       (e.g. RequestPath + the stored file name).
+    3. Content type -- the uploader can get a browser-renderable type
+       stored and served: no server-side extension allowlist or forced
+       extension, and the served Content-Type follows the stored
+       extension (e.g. .html -> text/html, .svg -> image/svg+xml).
+       X-Content-Type-Options: nosniff does not stop a file that is
+       served as text/html from rendering.
+    4. Browser execution on the app's origin -- THAT static response
+       renders inline (no Content-Disposition: attachment on it; one on
+       a separate download handler does not count), from the same
+       origin as the application (not a separate cookie-less origin,
+       and not a CSP sandbox on that response).
+    -> all four established from code in the review scope: CONFIRMED
+       stored XSS, as its own finding.
+    -> the upload lands under a web-root-like directory, but the hosting
+       configuration (1) or the URL mapping (2) is not in the review
+       scope: do NOT assume the directory is served.
+       Middleware and hosting configuration the scope does not show are
+       not assumed to exist (plays/finding-validation.md). Report
+       NEEDS_VERIFICATION and name the missing hosting evidence; do not
+       drop the candidate silently either.
+    -> the code shows that a check fails (e.g. a forced safe extension,
+       or attachment on the static response itself): no stored-XSS
+       finding; say which control holds.
 ```
 
 ## Downloads / static serving

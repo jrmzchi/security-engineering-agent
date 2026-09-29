@@ -264,7 +264,16 @@ Final findings
    security-sensitive using the attack path model below. Open the
    relevant play(s) from the table, at the depth step 1's review budget
    level specifies — see `plays/review-budget.md`'s "Context budget"
-   section for exactly what each level loads, not restated here. When a
+   section for exactly what each level loads, not restated here.
+   **`[V4 release]` Reading each selected domain's play is not
+   optional.** Before step 6, open and read `plays/<domain>.md` for
+   **every** domain step 1 selected: the manifest's `domains` when step 1
+   built one. Every domain name has a play of the same name. The budget
+   level decides how much *reference* material to add; it never decides
+   whether a listed domain's play is read. A finding class that a play
+   names can only be ruled in or out after reading that play — for
+   example `plays/file-security.md`'s "Uploads" stored-XSS checks for
+   uploads written under a served directory. When a
    candidate's source and sink are in different files, use
    `plays/cross-file-data-flow.md`'s explicit multi-hop procedure rather
    than stopping at the file boundary. **`[V4 Batch 0]`** When step 1
