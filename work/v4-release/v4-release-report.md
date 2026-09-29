@@ -1,5 +1,29 @@
 # V4 release completion report (2026-09-25)
 
+**Final status after protocol revision 7: `V4_RELEASE_NOT_READY` (not pushed). Release gate NOT_MET: 50 passed,
+2 failed, 0 invalid, 0 not run.**
+
+- **Fixed (`b92b1ef`):** the RV-29 product miss.
+  - `skills/security-review/SKILL.md` step 5 now makes reading every selected domain's play mandatory.
+  - `plays/file-security.md` "Uploads" now has four explicit stored-XSS checks; hosting is never assumed.
+  - **RV-29 now passes:** three separate CONFIRMED findings, with the stored-XSS evidence citing both the
+    `UseStaticFiles` block and the Upload action.
+- **RV-15 local check: NOT RESOLVED.** express-session is not available locally, and installing it needs network
+  access that this round does not authorize. RV-15 passed in this round (NOT_CONFIRMED), but that is not a
+  resolution of the question.
+- **New failures:**
+  - **RV-18** (`csrf_samesite_lax_deceptive.cs`, expected CONFIRMED): NOT_CONFIRMED. The classification left out
+    `web-security` in this round and the last. Revision 6's runner read `plays/web-security.md` anyway; this one
+    read only the listed domains' plays and stayed "within the reviewed domains". Product, **pending**: a
+    domain-selection gap, likely made visible by the step-5 change.
+  - **RE-08** (`group_lookup_fail_closed_safe.cs`, expected safe): CONFIRMED LOW, "authorization keyed to a mutable
+    AD group DN". The domains and plays read are identical to revision 6, which passed. Product, **pending**: most
+    likely a false positive from run-to-run variation.
+- **Everything else holds:** product Python code (identical to `644d419`), tests, fallbacks, feedback-record checks,
+  wrappers, and the privacy scan.
+
+Section 16 has the details; sections 1–15 are the earlier attempts, unchanged.
+
 **Final status after protocol revision 6 (collect-all): `V4_RELEASE_NOT_READY` (not pushed). Release gate NOT_MET:
 50 passed, 2 failed, 0 invalid, 0 not run.**
 
@@ -699,3 +723,106 @@ variance on borderline findings.
    running it; then decide product false positive versus fixture completeness (for example naming a store).
 3. **Stability.** A repeated-run measurement would separate variance from defects. It would be a new, separately
    authorized cohort.
+
+## 16. RV-29 guidance fix, RV-15 local check, protocol revision 7 (2026-09-29)
+
+**Starting state.**
+- `v4-release` HEAD `3e7e770`, clean working tree.
+- Local `v3-slim` and the golden-baseline tag at `f5502cd` (the release base).
+- Pins as in revision 6.
+
+**RV-15 — local check (no model).** Full record: protocol revision 7, "RV-15 local check".
+- **What the fixture shows:**
+  - no package manifest, so no express-session version is pinned;
+  - `resave: false`, `saveUninitialized: false`, no `store` (the default MemoryStore);
+  - the one route only reads the session.
+- **What the environment has:**
+  - Node `v26.7.0` is installed;
+  - express-session is absent from the global modules, the Node installation and the npm cache, where only
+    `express-5.2.1.tgz` is cached.
+- **Why it was not run:** installing express-session needs a network download, which is not authorized.
+- **Result: NOT RESOLVED.** No store state was observed, and RV-15's expectation was not changed.
+- **What would resolve it:** an authorized install of a stated version in a scratch directory, then requests to the
+  fixture's app while inspecting the MemoryStore.
+
+**RV-29 — root cause and fix (`b92b1ef`).**
+- **The guidance already existed:** `plays/file-security.md` already had the stored-XSS rule for uploads that are
+  served statically.
+- **Revision 6's RV-29 runner never opened that play.** Of the 52 reviews:
+  - 16 read any play;
+  - 6 read the play of every domain they were routed to;
+  - 1 read `plays/file-security.md`.
+- **The change,** by the user's choice (2026-09-29):
+  - SKILL step 5: read `plays/<domain>.md` for every selected domain before drafting findings, at every budget
+    level.
+  - The play: four checks for an upload under a served directory — hosting, public URL, content type, and
+    same-origin inline rendering.
+    - CONFIRMED only when all four are shown in scope.
+    - Missing hosting evidence → NEEDS_VERIFICATION naming what is missing.
+    - An upload outside any served directory → no stored-XSS finding.
+- **Tests:**
+  - `tools/context_manifest/tests/test_release_guidance_rv29.py` (8 tests): 2 fail when the SKILL paragraph is
+    removed, 3 when the play block is removed.
+  - One adapter test: the revision-6 RV-29 answer still fails.
+  - The grader, RV-29's facts and the V3 fixtures are unchanged.
+  - The decision function in the tests is a fixture-bound proxy. That a reviewer follows the play is shown only by a
+    review run.
+- **Review:** one independent review found no Blocker and no Major (READY). Its Minors were recorded in the protocol
+  and not fixed:
+  - the play's "->" outcomes have no stated precedence, and checks 3/4 can be left undetermined;
+  - the proxy's limits.
+
+**Validation (protocol revision 7, `92af53c`).**
+- **Pins:** tree `b92b1ef`, new kit export `60090969…` (confirmed at initialisation), manifest `ffab03e8…`
+  (unchanged), adapter `d5a9517b…` (unchanged).
+- **Runs:** 104 model runs, all valid; 0 technical retries; 1 result-tool call rejected and corrected by the runner;
+  0 outside reads; 0 hard stops; `claude-sonnet-5`, effort `high`.
+- **Counts:**
+
+  | Passed | Failed | Invalid | Not run |
+  |---|---|---|---|
+  | 50 (V3 corpus 38, enterprise identity 12) | 2 | 0 | 0 |
+
+- **Effect of the step-5 rule** (transcripts, revision 6 → 7):
+  - reviews reading any play: 16 → 37;
+  - reviews reading every routed domain's play: 6 → 17;
+  - reviews also reading a play outside their domains: 5 → 11.
+  The rule is followed more often, but still only in about a third of the reviews.
+- **Changes against revision 6:**
+  - RV-29 FAIL → **PASS**;
+  - RV-15 FAIL → PASS (not a resolution; see above);
+  - RV-18 PASS → FAIL;
+  - RE-08 PASS → FAIL.
+- **Failures:**
+
+  | Case | Expected | Answer | Classification | Evidence and what is pending |
+  |---|---|---|---|---|
+  | RV-18 (`csrf_samesite_lax_deceptive.cs`, V3 fixture unchanged) | CONFIRMED (CSRF) | NOT_CONFIRMED, "within the reviewed domains" | **product, pending** (domain selection plus step-5 side effect) | In both rounds the classification's `domains` left out `web-security`, the CSRF domain (revision 6: authentication, authorization, configuration-security; revision 7: authentication, authorization). Revision 6's runner read `plays/web-security.md` anyway and CONFIRMED. Revision 7's runner read exactly `plays/authentication.md` and `plays/authorization.md`. Pending: whether the new paragraph made the runner treat `domains` as a boundary. That is inference; one run cannot separate it from variation. The protocol flagged this side effect in advance |
+  | RE-08 (`group_lookup_fail_closed_safe.cs`) | no confirmed finding | CONFIRMED LOW: the authorization gate keys on a group's distinguished name, which a rename, delete-and-recreate or OU move can repoint | **product, pending**, most likely a false positive (run-to-run variation) | Revision 6 and revision 7 routed the same domains and read the same four files: SKILL, `authorization`, `enterprise-identity-security`, `finding-validation`. Revision 6 gave NOT_CONFIRMED. The scenario needs a directory administrator's change, and the case shows no attacker-controlled path. Pending: a code-level check of whether the fixture's DN comparison is itself a documented weakness |
+
+- **Release gates:**
+
+  | Gate | Result |
+  |---|---|
+  | Corpus and enterprise identity (all 52 must pass) | **NOT_MET** (50 of 52) |
+  | Hard stops | none |
+  | Product tests on the final tree | context_manifest 279 OK, feedback_store 354 OK (2 skipped) |
+  | Fallbacks, feedback records, wrappers | as before |
+  | Review | passed (READY) |
+  | Privacy scan | clean apart from the inherited record |
+
+**What this shows.**
+- The targeted fix worked: RV-29 now reports the stored XSS with the hosting evidence.
+- Two cases that passed before failed now. One of them (RV-18) sits right on the change's side effect: a
+  domain-selection gap that out-of-domain reading had been hiding. The other (RE-08) shows no difference in routing
+  or reading from the previous round.
+- With one run per case, part of the round-to-round change is variation that this validation cannot separate from
+  the effect of the change.
+
+**Next (needs a new authorization; nothing was started).**
+1. **RV-18.** Examine why classification leaves out `web-security` for a cookie-authenticated, state-changing
+   endpoint (SameSite=Lax). Decide whether step 5 should say explicitly that `domains` is a floor, not a boundary.
+2. **RE-08.** Settle the classification against the enterprise-identity guidance: a finding or a false positive.
+3. **RV-15.** An authorized install of express-session to run the local check.
+4. **Stability.** Several rounds now differ on borderline rows (RV-15, RE-08). A separately authorized
+   repeated-run measurement is the only way to tell variation from defects.
