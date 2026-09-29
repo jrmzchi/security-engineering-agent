@@ -150,9 +150,26 @@ Every endpoint still needs its function- and object-level check per
 ```text
 "Any signed-in domain / tenant user" used as the gate for an admin or
     sensitive function
-Group or role mapped by display name / sAMAccountName string instead of
-    a stable identifier (group object ID, SID, app role value) — names can
-    be renamed or duplicated
+Group or role mapped by display name: a display name is neither unique
+    nor a security identity key. An authorization decision keyed on one is
+    a finding. Use a stable identifier: group object ID, SID or app role
+    value
+Group or role mapped by a directory name that is unique but mutable
+    (sAMAccountName, a distinguished name): decide from the case's actual
+    trust boundary and attacker privileges, never from the field name
+    alone.
+    -> a rename, move or delete makes the match fail and access is denied
+       (fail-closed): an availability / configuration risk, recorded in
+       the notes. Not a security finding.
+    -> whoever may create, rename, or delete and recreate that directory
+       object controls the gate: an environment fact (directory
+       permissions), recorded as an assumption per "What this play does
+       not do". Not a finding by itself.
+    -> a security finding only when the code in scope shows one of these:
+       an ambiguous match across scopes (the same name accepted from
+       another domain, forest or tenant), a wrong identity-to-group
+       mapping, an authorization bypass, or a breach of an explicit policy
+       the scope states
 Group-claim overage ignored: when a user has too many groups the token
     carries an overage indicator (_claim_names / hasgroups) instead of the
     groups; treating "no group claim" as "no restriction" or as a default

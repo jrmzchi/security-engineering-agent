@@ -217,6 +217,11 @@ schema.py      manifest field contract -- required/optional fields,
 validator.py   the manifest validity checker (context-manifest-schema.md
                section 3) -- discards a failing manifest whole, never
                repairs one field in place
+signal_floor.py  [V4 release] the deterministic domain floor from
+               explicit code signals outside DEEP: it only ADDS a
+               domain. Today it has one rule: an ambient browser credential
+               plus a state-changing endpoint adds web-security (CSRF).
+               produce_manifest() applies it when given scope_texts
 producer.py    the built-in (non-Jev) manifest producer
                (v4-design.md section 4.1) -- "the product, not a
                fallback tier"; runs for every non-success Jev outcome

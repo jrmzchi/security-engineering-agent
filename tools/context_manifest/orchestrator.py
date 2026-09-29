@@ -114,7 +114,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence
 
 from .. import secret_heuristic
-from . import jev_adapter, jev_client, producer, redaction, schema
+from . import jev_adapter, jev_client, producer, redaction, schema, signal_floor
 from .domains import Fact
 from .validator import Classification, attach_validity, validate_manifest
 
@@ -165,6 +165,7 @@ def produce_manifest(
     target_change_files: Iterable[str] = (),
     classification: Optional[Classification] = None,
     baseline_facts: Optional[Mapping[str, Fact]] = None,
+    scope_texts: Optional[Mapping[str, str]] = None,
     factor_adjustment: int = 0,
     factors_evidence: Iterable[str] = (),
     scanner_selection: Optional[tuple] = None,
@@ -185,6 +186,7 @@ def produce_manifest(
     timeout_seconds: float = jev_client.DEFAULT_TIMEOUT_SECONDS,
 ) -> OrchestrationResult:
     target_files = tuple(target_change_files)
+    signal_reasons: tuple = ()
     # Caller-contract checks, before anything else, so both producers see
     # exactly the same inputs. A bare string is passed through unchanged
     # so the built-in producer raises its own TypeError for it (tuple()
@@ -204,6 +206,17 @@ def produce_manifest(
     else:
         if classification is None:
             raise ValueError(f"{review_mode} requires a caller-supplied Classification")
+        # 0a. [V4 release] The deterministic signal floor (signal_floor.py): explicit code signals in the scope can
+        #     only ADD a domain to item 0's classification, never remove one. The widened classification is the
+        #     floor for BOTH producers, so neither the built-in manifest nor a Jev candidate can drop it.
+        if scope_texts is not None:
+            extra = signal_floor.required_domains(scope_texts)
+            signal_reasons = extra.reasons
+            if extra.domains - frozenset(classification.implicated_domains):
+                classification = Classification(
+                    sensitivity=classification.sensitivity,
+                    implicated_domains=frozenset(classification.implicated_domains) | extra.domains,
+                )
         floor = classification
 
     def built_in(degradation: Optional[dict], audit: Dict[str, Any]) -> OrchestrationResult:
@@ -233,6 +246,8 @@ def produce_manifest(
             final = attach_validity(manifest, result)
         except Exception as exc:  # noqa: BLE001
             raise OrchestrationError(f"attach_validity raised on the built-in manifest: {type(exc).__name__}") from exc
+        if signal_reasons:
+            audit["signalFloor"] = list(signal_reasons)
         return OrchestrationResult(manifest=final, jev_outcome=final["degradation"]["jevOutcome"], produced_by="built_in", audit=audit)
 
     # 1. Token.
@@ -367,4 +382,6 @@ def produce_manifest(
 
     # 6. Accept the whole Jev manifest.
     audit["stage"] = "success"
+    if signal_reasons:
+        audit["signalFloor"] = list(signal_reasons)
     return OrchestrationResult(manifest=final, jev_outcome="success", produced_by="jev", audit=audit)

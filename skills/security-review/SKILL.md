@@ -135,7 +135,13 @@ Final findings
    it, not a normal degraded case to silently retry. **`[V4 Batch 2]`
    Build the manifest through `tools/context_manifest/orchestrator.py`'s
    `produce_manifest()` rather than calling `producer.build_manifest()`
-   directly**: it runs the same built-in producer when no
+   directly**. **`[V4 release]`** Pass the texts of the files in scope as
+   `scope_texts`: `tools/context_manifest/signal_floor.py` then adds any
+   domain the scope's explicit signals require. Today that is
+   `web-security` for an ambient browser credential together with a
+   state-changing endpoint (CSRF). It adds to item 0's `domains` and
+   never removes any, and a Jev candidate cannot drop it.
+   `produce_manifest()` runs the same built-in producer when no
    `TYPESAFE_API_KEY` is set (`degradation.jevOutcome: no_token`,
    `jevAttempted: false` — a fully supported, normal mode, not a
    degraded one), and otherwise makes one Jev call (a single attempt,
@@ -273,7 +279,14 @@ Final findings
    whether a listed domain's play is read. A finding class that a play
    names can only be ruled in or out after reading that play — for
    example `plays/file-security.md`'s "Uploads" stored-XSS checks for
-   uploads written under a served directory. When a
+   uploads written under a served directory. **`domains` is the
+   minimum, not a boundary.** It lists the plays that must be read. It
+   does not limit what the review may find. When the code in scope shows
+   a concrete candidate of another domain (for example a state-changing
+   endpoint reached with an ambient cookie, which is CSRF,
+   `web-security`), read that domain's play too and judge the candidate
+   by it. Do not dismiss it as outside the reviewed domains. This adds
+   the one play the candidate needs, not every play. When a
    candidate's source and sink are in different files, use
    `plays/cross-file-data-flow.md`'s explicit multi-hop procedure rather
    than stopping at the file boundary. **`[V4 Batch 0]`** When step 1

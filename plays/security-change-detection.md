@@ -89,6 +89,28 @@ an unnecessary targeted review. Those failure modes are not symmetric
 false assurance, which applies to workflow selection here the same way
 it applies to individual findings there.
 
+## Domains a signal pair requires
+
+Choosing `domains` is item 0's own reasoning, and the domains are a
+minimum (see `skills/security-review/SKILL.md` step 5). Some pairs of
+signals require a domain whatever else the scope does. When both halves
+appear, include the domain:
+
+```text
+ambient browser credential           + state-changing endpoint
+  (cookie authentication, a server      (POST/PUT/PATCH/DELETE, or a GET
+  session cookie, Windows Integrated    whose route names a state-changing
+  Authentication)                       action such as delete or update)
+  -> web-security (CSRF: the browser attaches the credential to a
+     cross-site request by itself; whether antiforgery, SameSite or a
+     custom header actually holds is the review's question)
+```
+
+`tools/context_manifest/signal_floor.py` applies the same rule
+deterministically when the manifest is built from the scope's file texts.
+If item 0 misses the domain, the manifest still carries it. It only adds
+domains; it never removes one.
+
 ## Detection signals
 
 Signals influence which workflow runs. **They are not vulnerability

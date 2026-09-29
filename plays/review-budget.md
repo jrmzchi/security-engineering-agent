@@ -253,12 +253,16 @@ never removes an activity a mode already committed to performing.
 
 **Review mode decides *which* domains are in scope; this play only
 decides how much material to load *within* that scope — it never
-expands the domain set mode already fixed.** For a `TARGETED`-mode
+expands the domain set mode already fixed.** (That set is the minimum
+to read. See the next paragraph for a candidate of another domain.) For a `TARGETED`-mode
 review, that set is whatever `skills/security-change-detection`
 identified; for QUICK/STANDARD, whatever `skills/security-review/SKILL.md`'s
 "Where to look next" table calls for at that mode (the same table
 `plays/code-review.md` itself points to for this — see that play's
 `TARGETED` note); for DEEP mode, everything DEEP mode already requires.
+That set is a minimum, not a boundary on findings. A concrete candidate of
+another domain, shown by the code in scope, brings that one domain's play
+in (`skills/security-review/SKILL.md` step 5). A budget level never does.
 This play's levels only control *depth* within that fixed set:
 
 ```text

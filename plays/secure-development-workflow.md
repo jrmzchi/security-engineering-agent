@@ -151,6 +151,9 @@ play cannot lower").
 "Targeted" means: review only the security domains the (re-)
 classification identified, using progressive disclosure — load the
 specific play(s)/reference(s) that apply, not the whole skill tree.
+Those domains are a minimum, not a boundary on findings: a concrete
+candidate of another domain shown by the code brings that one play in
+(`skills/security-review/SKILL.md` step 5).
 Domain-to-play routing is **not** a separate table maintained here or
 in `plays/scanner-selection.md` — it is `skills/security-review/SKILL.md`'s
 existing "Where to look next" table and `skills/security-review/references/quick-reference.md`,
