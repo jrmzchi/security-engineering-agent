@@ -1,5 +1,23 @@
 # V4 release completion report (2026-09-25)
 
+**Final status after protocol revision 8: `V4_RELEASE_READY` by the pre-registered result rule. Not pushed: pushing was
+not authorized in this round. Release gate MET: 52 of 52 passed, 0 failed, 0 invalid, 0 not run.**
+
+- **What passing covers:**
+  - all 39 corpus cases and all 13 enterprise-identity cases;
+  - the product tests, offline fallbacks, feedback-record checks, consistency wrappers, the review and the privacy scan
+    on the final tree.
+- **Limits that remain:**
+  - **RV-15 is NOT RESOLVED.** It passed, but the express-session question behind its earlier failure was never
+    checked locally: no package could be installed.
+  - **Each case ran once.** Several borderline rows (RV-15, RE-08, RV-18) have flipped between rounds, and this
+    validation measures no stability.
+  - **Two open design questions:**
+    - whether the new CSRF floor should apply in TARGETED mode with NONE sensitivity;
+    - how the history of the force-updated remote `v3-slim` is to be handled before any push.
+
+Section 17 has the details; sections 1–16 are the earlier attempts, unchanged.
+
 **Final status after protocol revision 7: `V4_RELEASE_NOT_READY` (not pushed). Release gate NOT_MET: 50 passed,
 2 failed, 0 invalid, 0 not run.**
 
@@ -826,3 +844,108 @@ variance on borderline findings.
 3. **RV-15.** An authorized install of express-session to run the local check.
 4. **Stability.** Several rounds now differ on borderline rows (RV-15, RE-08). A separately authorized
    repeated-run measurement is the only way to tell variation from defects.
+
+## 17. RV-18 CSRF floor, RE-08 trust-boundary rule, protocol revision 8 (2026-09-29)
+
+**Starting state.**
+- `v4-release` HEAD `296e9ed`, clean working tree.
+- Local `v3-slim` and the golden-baseline tag at `f5502cd` (the release base).
+
+**RV-18 — root cause.**
+- Outside DEEP, `domains` is chosen by item 0's reasoning alone. DEEP's deterministic rule (`domains.py`: web-security
+  stays unless "no cookie/ambient auth for a state change" is positively confirmed) was not applied anywhere else.
+- In revisions 6 and 7, item 0 left out web-security for a cookie-authenticated GET deletion. Revision 7's runner
+  read only the listed domains' plays.
+- The documents allowed that reading: the domain set was called "fixed", and nothing said whether it bounds findings.
+
+**RV-18 — fix** (`315af46`, by the user's decision). Decision: `domains` is the minimum to read, not a boundary on
+findings.
+- `tools/context_manifest/signal_floor.py`, a floor that only adds.
+  - Rule CSRF-AMBIENT: an ambient browser credential plus a state-changing endpoint requires web-security.
+  - It is limited to that signal pair, and its patterns are a stated proxy with known misses.
+- `produce_manifest(scope_texts=...)` applies the floor to both producers, and the validator rejects a candidate
+  without it.
+- Guidance aligned: SKILL steps 1 and 5, `plays/review-budget.md`, `plays/secure-development-workflow.md`,
+  `plays/scanner-selection.md`, and `plays/security-change-detection.md` ("Domains a signal pair requires").
+- The adapter's relman now passes the case workspace as `scope_texts`, as the kit's step 1 does in real use.
+- In this corpus the floor fires on exactly RV-18, RV-28, RE-09, RE-10 and RE-11 — each has both halves.
+
+**RE-08 — trust boundary.** Record: `work/v4-release/re08-group-identifier-evidence.md`.
+- The group DN is a constant, the identity is the authenticated principal, and a lookup failure denies.
+- Only a directory writer can change what the DN names: a rename or move fails closed; a delete-and-recreate is an
+  environment fact.
+- No attacker path exists, so it is not a security vulnerability.
+- **Root cause:** the play's stable-identifier rule had no case for unique-but-mutable names.
+- **Rule now** (user's decision):
+  - a display name is never a security key;
+  - a fail-closed rename or move of a sAMAccountName or DN is an availability/configuration risk;
+  - control over the directory object is an environment assumption;
+  - a finding needs a shown ambiguity across scopes, a wrong mapping, a bypass or a policy breach;
+  - general authorization rules are unchanged.
+
+**Tests.**
+- `tools/context_manifest/tests/test_release_rv18_re08.py`, 16 tests.
+- Mutants killed: the floor union removed; a rule firing on one half; the SKILL minimum paragraph removed; the play
+  rule reverted.
+- Two adapter tests for relman.
+- Full suites: context_manifest 295 OK, feedback_store 354 OK, adapter 49 OK.
+
+**Review.**
+- One independent review: no Blocker or Major (READY).
+- One concentrated fix, text only:
+  - the remaining "domains bounds the review" sentences now point to step 5;
+  - the attribution caveat now covers every row;
+  - smaller wording fixes.
+- Fix-only re-review: READY, with 2 Nits recorded.
+- Recorded, not changed:
+  - the `scanner_selection` caller obligation;
+  - the floor's known misses and false fires;
+  - that the audit cannot tell "not evaluated" from "evaluated, nothing added";
+  - the TARGETED+NONE question.
+
+**Validation (protocol revision 8, `b561c4c`).**
+- **Pins:** tree `315af46`, kit export `b90751e3…`, manifest `ffab03e8…` (unchanged), adapter caseval
+  `15e0dbb1…`, relman `55c307b7…`, caseresult `42eb0365…`, all confirmed at initialisation.
+- **Runs:** 104 model runs, all valid; 0 technical retries; 2 result-tool calls rejected and corrected by the runner;
+  0 outside reads; 0 hard stops; `claude-sonnet-5`, effort `high`.
+- **Counts:**
+
+  | Passed | Failed | Invalid | Not run |
+  |---|---|---|---|
+  | 52 (V3 corpus 39, enterprise identity 13) | 0 | 0 | 0 |
+
+- **Rows that changed against revision 7:**
+  - RV-18 FAIL → PASS. Item 0 itself selected web-security this round, and the floor fired as well; the reviewer read
+    `plays/web-security.md` and CONFIRMED the CSRF.
+  - RE-08 FAIL → PASS (NOT_CONFIRMED).
+- **The floor rows that are expected safe:** RV-28 and RE-10 read one more play and stayed NOT_CONFIRMED.
+- **RV-15:** passed (NOT_CONFIRMED). **Still NOT RESOLVED** — see revision 7's local check.
+
+**Release gates.**
+
+| Gate | Result |
+|---|---|
+| Corpus and enterprise identity (all 52 must pass) | **MET** (52 of 52) |
+| Hard stops | none |
+| Product tests on the final tree | context_manifest 295 OK, feedback_store 354 OK (2 skipped) |
+| Offline fallbacks A/D/E/F | all built-in, floor kept |
+| Feedback-record checks (9 scenarios) | as before |
+| Wrappers (PS 5.1 / PS 7 / Bash) | 23 hits each; exit 2 without Python |
+| Review | passed (READY, fix-only re-review READY) |
+| Privacy scan | clean apart from the inherited record (checked after this report's commit) |
+
+**Result.** `V4_RELEASE_READY` by the pre-registered result rule.
+
+**Not pushed.** This round's authorization excludes push and network operations.
+
+**What READY does not mean.**
+- **Not run-to-run stable:** each case ran once, and borderline rows have flipped before.
+- **Not a resolution of RV-15:** that question is still open.
+- **Not a V3-versus-V4 comparison:** corpus `/5` differs from V3 in 12 rows.
+
+**Next (needs a new authorization).**
+1. **Push.** Decide first how to handle the force-updated remote `v3-slim` history (`39a7b0b`), which does not contain
+   the release base `f5502cd`.
+2. **The TARGETED+NONE question** for the signal floor.
+3. **RV-15:** an authorized express-session install for the local check.
+4. **Stability:** a separately authorized repeated-run measurement.
