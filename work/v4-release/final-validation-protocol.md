@@ -1,73 +1,100 @@
-# V4 final release validation — pre-registered protocol, revision 6 (2026-09-26)
+# V4 final release validation — pre-registered protocol, revision 7 (2026-09-29)
 
 Written and committed **before any model run** of this attempt. The user authorized:
-- the RV-28 fixture correction and the RV-24/26/37 hard-link investigation;
-- a **collect-all** validation method;
-- one independent review, one concentrated fix, one fix-only re-review;
-- then one complete validation of all 39 corpus and 13 enterprise-identity cases.
+- a fix of the confirmed RV-29 product miss in the kit's guidance;
+- a local, reproducible investigation of RV-15;
+- one independent review, one fix-only re-review;
+- then one complete validation of all 39 corpus and 13 enterprise-identity cases, collect-all as in revision 6.
 
-That authorizes no product change, no product-guidance change, no weaker grader, no rewriting of historical results
-or stops, no Jev call, no model pre-run and no second repair or validation cycle.
+That authorizes no weaker grader, no change to RV-29's vulnerability facts or to any V3 fixture, expected result or
+historical result, no stability measurement, no Jev call and no second repair or validation cycle.
 
-**Release base:** the local `v3-slim-golden-baseline` tag, `f5502cdcd079a5589c39f667ebdfbb34e276aafd`. It is not
-`origin/v3-slim`, which was force-updated to an unrelated history (`39a7b0b`) and is handled separately.
+**Release base:** the local `v3-slim-golden-baseline` tag, `f5502cdcd079a5589c39f667ebdfbb34e276aafd`.
 
 **Earlier attempts, kept as records (none is a pass):**
-- **Revision 1** (`cf6fe8d`) stopped at RV-02.
-- **Revision 2** (`868ef5d`, corpus `/1`) stopped at RV-04.
-- **Revision 3** (`7d1a767`, corpus `/2`) stopped at RV-15.
-- **Revision 4** (`cedcf19`, corpus `/3`) stopped at RV-29.
-- **Revision 5** (`298fb31`, corpus `/4`) stopped at RV-28. A valid answer CONFIRMED a race condition (TOCTOU) in the
-  per-user upload quota of `v4_release/file_upload_authenticated_safe.py`, and the code confirms it. The record is
-  `work/v4-release/v4-release-report.md` §14, unchanged.
+- revisions 1–5 stopped at RV-02, RV-04, RV-15, RV-29 and RV-28;
+- **revision 6** (`bc7abdc`, corpus `/5`, collect-all) ran all 52 cases: 50 passed and 2 failed.
+  - RV-15: CONFIRMED LOW on express-session's default MemoryStore.
+  - RV-29: stored XSS not reported.
+  - The record is `work/v4-release/v4-release-report.md` §15, unchanged.
 
-## What changed (corpus `v4-release-corpus/5`)
+## What changed
 
-- **RV-28:** `tests/fixtures/v4_release/file_upload_authenticated_quota_atomic_safe.py` (git blob `9e09e177`).
-  - Every control of the previous fixture is kept.
-  - The quota is now an atomic reservation: an exclusive create of one of `MAX_FILES_PER_USER` numbered slot files,
-    released when the write fails.
-  - The previous fixture stays unchanged as the regression input.
-  - The concurrency tests are in `tools/context_manifest/tests/test_release_fixture_quota.py`.
-- **RV-24, RV-26, RV-37:** unchanged. Their reparse-point check does not detect hard links; that was verified by a
-  mechanism test. None of the cases has a write path into its base directory, so the attack is not established. See
-  `work/v4-release/hard-link-threat-model.md`.
-- **Every other row** is `/4` unchanged, including RV-29 and its `expectedFindings`. The RV-29 correction, its review
-  and its recorded limit (a replaced row's own `rowId` is not checked for uniqueness; `/5` has 39 distinct values)
-  are described in revision 5 (`298fb31`) and still apply.
-- **Adapter:** the collect-all driver, the hard-stop policy, the record-integrity check and wider isolation roots
-  (rule 7 below). The grading functions are unchanged from revision 5.
-- **Review:** one independent review found one Major. Stops inside a run (kit, workspace, CLI version, credential,
-  slot directory, missing manifest) exited without being written into the state, so a stopped run could have been
-  resumed. It was fixed: every in-run stop now goes through the recorded stop.
-  - Unit tests and mutants cover the kit and workspace stops and the attempt-level hard stop.
-  - The CLI-version, credential and slot-directory stops were confirmed by the re-reviewer's probes, not by a unit
-    test. That is a recorded limit, not fixed, per the bounded cycle.
+- **RV-29 root cause:** the stored-XSS guidance already existed at `plays/file-security.md` ("Uploads"). The
+  revision-6 RV-29 runner read only the case file and `skills/security-review/SKILL.md`, and never opened the play.
+  Across the 52 revision-6 reviews, 16 read any play and 1 read `plays/file-security.md`. By the user's decision
+  (2026-09-29), the fix covers both files. These are **product guidance** changes; no product code changed:
+  - `skills/security-review/SKILL.md` step 5: reading `plays/<domain>.md` for every selected domain is mandatory
+    before step 6, at every budget level.
+  - `plays/file-security.md` "Uploads": four explicit checks for an upload written under a served directory:
+    hosting, public URL, content type, and same-origin inline rendering. Stored XSS is CONFIRMED only when all four
+    are established from code in scope. When the upload lands under a web-root-like directory but the hosting or URL
+    mapping is not in scope, the result is NEEDS_VERIFICATION naming the missing evidence; hosting is never assumed.
+  - Regression tests: `tools/context_manifest/tests/test_release_guidance_rv29.py`, plus one adapter test. The
+    adapter test shows that the revision-6 RV-29 answer still FAILS on the missing `upload-stored-xss` finding, so
+    no threshold was lowered. `caseval.py`, `caseresult.py` and `relman.py` are unchanged.
+  - **What these tests protect, and what they do not.** They fail if the SKILL paragraph or the play block is
+    removed (checked by removing each), and if the old answer would be let through. Their decision function is a
+    fixture-bound proxy of the rule. That the miss was the reviewer not reading the play cannot be reproduced
+    deterministically; whether a reviewer now applies the play is shown only by the validation run below.
+- **RV-15:** not resolved (see "RV-15 local check" below). Its fixture and its expected result ("no confirmed
+  finding") are unchanged.
+- **Corpus, fixtures, grader, adapter:** unchanged from revision 6. Corpus `/5`; `caseval.py` is the same file as in
+  revision 6 (only the adapter's tests gained the test above).
+- **Review:** one independent review found no Blocker and no Major, and said READY. By the user's procedure a
+  fix-only cycle applies to Blocker/Major only, so the reviewed guidance is committed unchanged. These Minors are
+  recorded, not fixed:
+  - The play's three "->" outcomes have no stated precedence. Case one: an upload under `wwwroot/` with a forced
+    safe extension shown in code, but no hosting in scope, matches both "NEEDS_VERIFICATION" and "a check fails".
+    Case two: a case where checks 1–2 are established but 3 or 4 is neither shown nor refuted (e.g. a custom
+    content-type provider outside the scope) has no stated outcome. No `/5` row falls into either case.
+  - The test proxy's limits, now stated in its docstring.
+  - Wording in this protocol, now corrected.
+- **Attribution caveat:** reading every selected domain's play now applies to every case. If a safe row gets a new
+  CONFIRMED in this round, that change is a possible cause to weigh when classifying it.
 
-  The Minors and Nits were fixed in the same concentrated cycle:
-  - an attempt-level stop test;
-  - the adapter docstring;
-  - the corpus-document wording on symbolic links, mount points and "served";
-  - the rule 3 pointer.
+## RV-15 local check (before any model run)
 
-  Its two open doubts were settled towards stopping:
-  - any read outside the run's workspace and kit is now an `ISOLATION` hard stop, not telemetry;
-  - a transcript cwd or add-dir mismatch is `ISOLATION`, not a retryable `TRANSCRIPT` failure.
+- **Question:** does express-session, configured as in the fixture, create or keep MemoryStore records for requests,
+  when `saveUninitialized: false` is set and no route writes to the session?
+- **What the fixture shows:**
+  - it pins no version: there is no package manifest in the case, only `require('express-session')`;
+  - the configuration is `name: 'sid'`, `resave: false`, `saveUninitialized: false`, cookie `httpOnly`, `secure`,
+    `sameSite: 'lax'`, `maxAge: 30 min`, and **no `store`**;
+  - the one route only reads `req.session.userId`.
+- **Environment:** Node `v26.7.0` is installed (`node --version`). express-session is **not available locally**.
+  The method, all read-only:
+  - `which node npm`;
+  - a listing of the global module directory, which holds only `@anthropic-ai`, and of the Node installation's
+    `node_modules`, which holds only `npm`;
+  - a fixed-string search for `express-session` in the npm cache index, with 0 hits (the only related tarball is
+    `express-5.2.1.tgz`);
+  - a `find` for a directory named `express-session` under the user's documents, the global npm directory and the
+    npm `_npx` cache, with none found (the reviewer repeated a search of the user directory to depth 7, with none
+    found).
 
-  One fix-only re-review followed.
+  Installing express-session needs a network download, and network operations and package installation are not
+  authorized in this round.
+- **Result: NOT RESOLVED.** No store state was observed. The row is not re-graded, and its expectation is not
+  changed.
+- **What would resolve it:** an authorized install of a stated express-session version into a scratch directory, and
+  then a local script that sends requests to the fixture's app and inspects the MemoryStore's contents.
 
 ## Pins
 
 | Item | Value |
 |---|---|
-| Tree validated | `17edea1afd32bafd655aa6ee4c3aac42afa74910`: product code identical to `644d419`. Relative to revision 5, the commit adds only the RV-28 fixture, the `/5` manifest, the corpus document, the hard-link record and test changes |
-| Kit export | tree sha256 `989958851b518c4a6ba132120e94f7ca8b4fe12b5606158f4b1b22e86997d525`, identical to the `644d419` export (checked at initialisation; a different value stops the run) |
-| Corpus manifest | `tests/validation/v4-release-corpus-v5-manifest.json`, `v4-release-corpus/5`, sha256 `ffab03e8ff549ca0214338f1beed743f83a9ea77a034e83a6e3e23e61432f741` (git blob `24f81a50`), read from the pinned commit |
-| Expected results | `expected-results.md` `2fac68d5...` (unchanged); `v4-release-corpus.md` `b6e6d6a9...`; `v4-enterprise-identity-expected-results.md` `320581bc...` (unchanged) |
+| Tree validated | `b92b1efe2d177fde258dd53a6d02f8a8581aadff`: relative to revision 6, the commit changes only `skills/security-review/SKILL.md` (step 5) and `plays/file-security.md` ("Uploads") and adds `tools/context_manifest/tests/test_release_guidance_rv29.py`. Product Python code is identical to `644d419` |
+| Kit export | tree sha256 `60090969f012b763eed97f50f8cfc606fadba001c9e9885f4703a88b048372a9` (**new**: the kit contains the changed skill and play). It is checked at initialisation; a different value stops the run |
+| Corpus manifest | `tests/validation/v4-release-corpus-v5-manifest.json`, `v4-release-corpus/5`, sha256 `ffab03e8ff549ca0214338f1beed743f83a9ea77a034e83a6e3e23e61432f741` (unchanged), read from the pinned commit |
+| Expected results | `expected-results.md` `2fac68d5...`; `v4-release-corpus.md` `b6e6d6a9...`; `v4-enterprise-identity-expected-results.md` `320581bc...` (all unchanged) |
 | Runner | restricted `claude -p` (CLI `2.1.282`), `--model sonnet` (`claude-sonnet-5`), effort `high`, Read/Grep/Glob + the result tool, no shell |
 | Structured-channel library | `v4-planning` at `72dadd1`, read-only; sha256 `ca5476b7eb684ed3d2d2ac48e965dd7d1c3ea27185edaace6381cb5295d412fd` |
-| External adapter (local, not shipped) | `caseval.py` `d5a9517b8dc87a320426cae6cdf58c3f255da4b33376cf52f6761d1ae4d4d564`, `caseresult.py` `42eb03657c6b4dd8a4b59ecff9b27558df892baa0798a3871312efcc97033b00`, `relman.py` `6e18acc02f8c847d3394d1374afc1e22c26df0aff82bd705af3fa6d47aa79d7d` (LF-normalized); run with `CASEVAL_CORPUS_MANIFEST=tests/validation/v4-release-corpus-v5-manifest.json` and `CASEVAL_CORPUS_VERSION=v4-release-corpus/5` (a manifest whose version differs stops the run) |
+| External adapter (local, not shipped) | `caseval.py` `d5a9517b8dc87a320426cae6cdf58c3f255da4b33376cf52f6761d1ae4d4d564` (unchanged), `caseresult.py` `42eb03657c6b4dd8a4b59ecff9b27558df892baa0798a3871312efcc97033b00`, `relman.py` `6e18acc02f8c847d3394d1374afc1e22c26df0aff82bd705af3fa6d47aa79d7d` (LF-normalized); run with `CASEVAL_CORPUS_MANIFEST=tests/validation/v4-release-corpus-v5-manifest.json` and `CASEVAL_CORPUS_VERSION=v4-release-corpus/5` |
 | Jev | not called in this phase |
+
+**Stop rule for this round (user, 2026-09-29):** the validation runs collect-all (rule 7). If any case fails, the
+result is `V4_RELEASE_NOT_READY` and no further repair or rerun cycle is opened.
 
 ## Rules
 
@@ -178,5 +205,5 @@ or stops, no Jev call, no model pre-run and no second repair or validation cycle
 
 **Result rule.** All 52 cases (39 rows of `v4-release-corpus/5` + 13 enterprise-identity rows) must pass. Any
 `FAILED` or `NOT_OBTAINED` case, or a hard stop, makes the gate `NOT_MET`. Beyond that, the product unit tests, fallback checks, review gate and privacy
-scan must still hold on the validated tree (product code identical to `644d419`) for `V4_RELEASE_READY`. Anything else is `V4_RELEASE_NOT_READY`, with no further
+scan must still hold on the validated tree (product Python code identical to `644d419`; the skill and play changed as above) for `V4_RELEASE_READY`. Anything else is `V4_RELEASE_NOT_READY`, with no further
 repair or validation cycle.
