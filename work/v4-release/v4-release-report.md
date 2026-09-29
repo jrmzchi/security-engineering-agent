@@ -1,5 +1,17 @@
 # V4 release completion report (2026-09-25)
 
+**Final status after protocol revision 9: `V4_RELEASE_READY` by the pre-registered result rule. Not pushed: this round
+excludes push and remote-history work. Release gate MET: 52 of 52 passed, 0 failed, 0 invalid, 0 not run.**
+
+- **RV-15 is resolved for the tested version only.** express-session 1.19.0 with express 5.2.1 on Node v26.7.0, the
+  unchanged fixture, 515 requests per transport: 0 MemoryStore records. The revision-6 "session flooding" finding does
+  not reproduce. No historical result was changed.
+- **The CSRF signal floor also applies at TARGETED/NONE**, by the user's decision, and is reachable from the
+  workflow: the NONE stop now has one exception for that signal pair.
+- **Each case ran once**, so this measures no run-to-run stability.
+
+Section 18 has the details; sections 1–17 are the earlier attempts, unchanged.
+
 **Final status after protocol revision 8: `V4_RELEASE_READY` by the pre-registered result rule. Not pushed: pushing was
 not authorized in this round. Release gate MET: 52 of 52 passed, 0 failed, 0 invalid, 0 not run.**
 
@@ -949,3 +961,110 @@ findings.
 2. **The TARGETED+NONE question** for the signal floor.
 3. **RV-15:** an authorized express-session install for the local check.
 4. **Stability:** a separately authorized repeated-run measurement.
+
+## 18. RV-15 local check, CSRF floor at TARGETED/NONE, protocol revision 9 (2026-09-29/30)
+
+**Starting state.**
+- `v4-release` HEAD `51318a1`, clean working tree.
+- Local `v3-slim` and the golden-baseline tag at `f5502cd`.
+
+**RV-15 — local check.** Full record with the script: `work/v4-release/rv15-local-check.md`.
+- **Install:** express-session **1.19.0**, pinned exactly (the current registry version), and express 5.2.1, with
+  `--ignore-scripts` in an isolated scratch directory outside the repository. Network was used only to fetch them;
+  the repository's dependencies are untouched.
+- **Input:** the fixture, unchanged, as a byte copy (blob `cb20c3a8`).
+- **Method:** MemoryStore instrumentation catches the fixture's own internally created store. Transports: plain HTTP,
+  and simulated TLS for its `secure` cookie.
+- **Requests per transport (515):**
+  - no cookie;
+  - an unprefixed `sid`;
+  - a bad signature;
+  - a `sid` validly signed with the fixture's secret for a nonexistent session;
+  - the allowlisted origin;
+  - an unknown path;
+  - OPTIONS, HEAD and POST.
+- **Observed:**
+  - **0 records**, no `set`/`touch`/`destroy`, and 0 Set-Cookie headers;
+  - 50 `get` calls, only from the validly signed cookies, which also shows the hook sits on the fixture's own store;
+  - the positive controls (`saveUninitialized: true`, and a session-writing route) stored 50 of 50.
+- **Conclusion, for that version only:**
+  - RV-15's revision-6 finding was a review false positive. It matches the code: `saveUninitialized: false`, and no
+    route writes the session.
+  - The fixture and its expectation are unchanged.
+  - Revision 6's RV-15 FAIL stays in that round's record.
+
+**CSRF floor at TARGETED/NONE (user decision).**
+- **Code:** already covered. Step 0a widens item 0's classification before the NONE shortcut and before both
+  producers and the validator.
+- **Workflow:** not covered at first. The workflow's "NONE -> stop here" came before the manifest step, so the floor
+  was unreachable.
+- **Fix** (review Major, `fe3f646`): the workflow's NONE row and the change-detection NONE action now carry one
+  exception. When the scope shows both halves of the pair, the manifest is built as TARGETED and only that domain is
+  reviewed (its play read), at MINIMAL budget. `AGENTS.md`, `CLAUDE.md` and `plays/review-budget.md` agree.
+  Sensitivity is not raised, no design step runs, and no other play is loaded.
+- **Tests:**
+  - **positive:** TARGETED/NONE with both signals gives web-security, with and without a token (with a token the
+    NONE shortcut is not taken);
+  - **negative:** missing either half adds nothing and keeps the shortcut;
+  - the NONE exception is asserted in all four documents;
+  - the mutant "floor skipped at NONE" is killed.
+
+**Review.**
+- **Independent review:** one Major, the unreachable NONE path, fixed.
+- **Minors fixed:**
+  - the RV-15 record's signer version (express-session's nested cookie-signature is 1.0.7);
+  - a validly-signed-cookie scenario added to the check;
+  - the Result rule's pointer;
+  - the test wording;
+  - the orchestrator comment.
+- **Fix-only re-review:** READY. Recorded, not fixed:
+  - **Minor:** the NONE exception is triggered by the agent noticing the pair; it does not yet require running
+    `signal_floor.required_domains()`.
+  - **Minor:** the exception does not state its relation to the NONE row's "no scanner / no summary", or to "No
+    security theater".
+  - **Nit:** `CLAUDE.md`'s wording.
+
+**Validation (protocol revision 9, `54d912a`).**
+- **Pins:** tree `fe3f646`, kit export `812115b5…` (changed by guidance text only), manifest `ffab03e8…`, adapter
+  caseval `15e0dbb1…`, relman `55c307b7…`, caseresult `42eb0365…` (all unchanged), confirmed at initialisation.
+- **Runs:** 105 model runs.
+  - 104 valid;
+  - 1 technical invalid: RV-26's first review, `CHANNEL`: "2 tool calls in the transcript but 1 in the audit log".
+    It was retried once, as rule 7 allows, and the retry was valid (NOT_CONFIRMED);
+  - 3 result-tool calls rejected and corrected by the runner;
+  - 0 outside reads; 0 hard stops; `claude-sonnet-5`, effort `high`.
+- **Counts:**
+
+  | Passed | Failed | Invalid | Not run |
+  |---|---|---|---|
+  | 52 (V3 corpus 39, enterprise identity 13) | 0 | 0 | 0 |
+
+- **Rows of interest:**
+  - RV-15 NOT_CONFIRMED;
+  - RV-18 CONFIRMED;
+  - RV-29 CONFIRMED ×3;
+  - RE-08 NOT_CONFIRMED;
+  - the floor fired on exactly RV-18, RV-28, RE-09, RE-10 and RE-11, and its two expected-safe rows (RV-28, RE-10)
+    stayed NOT_CONFIRMED.
+
+**Release gates.**
+
+| Gate | Result |
+|---|---|
+| Corpus and enterprise identity (all 52 must pass) | **MET** (52 of 52) |
+| Hard stops | none |
+| Product tests on the final tree | context_manifest 298 OK, feedback_store 354 OK (2 skipped) |
+| Offline fallbacks A/D/E/F | all built-in, floor kept |
+| Feedback-record checks (9 scenarios) | as before |
+| Wrappers (PS 5.1 / PS 7 / Bash) | 23 hits each; exit 2 without Python |
+| Review | passed (one Major fixed; fix-only re-review READY) |
+| Privacy scan | clean apart from the inherited record (checked after this report's commit) |
+
+**Result.** `V4_RELEASE_READY` by the pre-registered result rule.
+
+**Not pushed.** The remote `v3-slim` history is not handled this round.
+
+**What READY does not mean.**
+- **Not run-to-run stable:** one run per case, and borderline rows have flipped between rounds before.
+- **Not an RV-15 result beyond express-session 1.19.0.**
+- **Not a V3-versus-V4 comparison.**
