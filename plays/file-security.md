@@ -83,6 +83,64 @@ Content containing embedded scripts (e.g. an uploaded .svg or .html
     correct control. Do not use this control as a substitute for the
     web-root/script-execution control above — they address different
     halves of "executable content".
+
+Uploads stored under a directory the app serves statically (e.g.
+    ASP.NET Core wwwroot/ via StaticFiles, Express static(), a
+    Flask/Django static root) where the uploader influences the
+    stored file's extension or served content type (no server-side
+    extension allowlist or forced extension; a check on the
+    client-supplied Content-Type does not count, see the first
+    item above)
+    -> the uploaded file is reachable at its own static URL, so an
+    uploaded .html/.svg renders on the app's origin: unrestricted upload
+    -> stored XSS (CWE-434 + CWE-79). A Content-Disposition header set
+    by a separate download handler does NOT protect it: that header
+    only applies to responses that handler sends, and a direct request
+    for the static URL never reaches it. Check which response actually
+    serves the file.
+    -> report it as its OWN finding, even when the same code also has a
+    confirmed path-traversal finding (e.g. the filename used unsanitized
+    to build the path): fixing the traversal leaves this one open, so
+    one finding must not absorb the other.
+
+Whenever an upload is written under a web root or another directory the
+    code names as served (e.g. wwwroot/, public/, static/), or under any
+    directory that code in the review scope serves, work through these
+    four checks before deciding the stored-XSS finding. Never skip them
+    because a path-traversal finding on the same code was already
+    written. (An upload stored outside any web root, with nothing in the
+    review scope serving that directory, gets no stored-XSS finding; the
+    other upload checks above still apply.)
+    1. Hosting -- the code or configuration that serves that directory:
+       app.UseStaticFiles(...) (the default web root, or its
+       FileProvider), express.static(dir), a Flask/Django static root,
+       or a web-server alias or virtual directory.
+    2. Public URL -- the request path where a stored upload is reached:
+       the storage path mapped through that configuration's prefix
+       (e.g. RequestPath + the stored file name).
+    3. Content type -- the uploader can get a browser-renderable type
+       stored and served: no server-side extension allowlist or forced
+       extension, and the served Content-Type follows the stored
+       extension (e.g. .html -> text/html, .svg -> image/svg+xml).
+       X-Content-Type-Options: nosniff does not stop a file that is
+       served as text/html from rendering.
+    4. Browser execution on the app's origin -- THAT static response
+       renders inline (no Content-Disposition: attachment on it; one on
+       a separate download handler does not count), from the same
+       origin as the application (not a separate cookie-less origin,
+       and not a CSP sandbox on that response).
+    -> all four established from code in the review scope: CONFIRMED
+       stored XSS, as its own finding.
+    -> the upload lands under a web-root-like directory, but the hosting
+       configuration (1) or the URL mapping (2) is not in the review
+       scope: do NOT assume the directory is served.
+       Middleware and hosting configuration the scope does not show are
+       not assumed to exist (plays/finding-validation.md). Report
+       NEEDS_VERIFICATION and name the missing hosting evidence; do not
+       drop the candidate silently either.
+    -> the code shows that a check fails (e.g. a forced safe extension,
+       or attachment on the static response itself): no stored-XSS
+       finding; say which control holds.
 ```
 
 ## Downloads / static serving
@@ -138,18 +196,8 @@ another user's file, or overwrite a file the application depends on.
 
 ## Windows and macOS path semantics
 
-Consider both when the deployment target is cross-platform:
-
-```text
-Windows: case-insensitive filesystem by default, drive letters, UNC
-    paths, `\` and `/` both often accepted as separators, reserved
-    device names (CON, PRN, AUX, NUL, COM1...) as filenames can behave
-    unexpectedly
-macOS: case-insensitive-by-default (but case-preserving) on the common
-    default filesystem format, though case-sensitive volumes exist;
-    do not assume filename comparisons are safe across both without
-    checking
-```
-
-See `references/windows-security.md` and `references/macos-security.md`
-for platform-specific detail.
+Consider both when the deployment target is cross-platform — see
+`references/windows-security.md` and `references/macos-security.md` for
+the platform-specific detail (case-insensitivity's risk direction
+depending on denylist vs. allowlist checks, path-separator acceptance,
+drive letters/UNC paths, reserved device names, Unicode normalization).

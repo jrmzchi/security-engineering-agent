@@ -1,0 +1,426 @@
+"""V4 release corpus manifests (v4-release-corpus/1 to /4, kept as records; v4-release-corpus/5, current) and the
+V4-release replacement fixtures.
+
+Deterministic checks only -- whether a reviewer reaches the right verdict needs a review run:
+- 39 rows each; every replaced row keeps its form and expected result, names the V3 fixture it replaces and why, and
+  points at an existing fixture; every other row maps to its unchanged V3 fixture and V3 result;
+- each safe replacement fixture keeps the property its V3 row tests, and none returns user or account data;
+- RV-29's replacement (expected unsafe, /4) shows its hosting path in code, and its expected findings' evidence
+  anchors exist in it -- while the V3 fixture has no hosting code for the stored-XSS anchor to bind to;
+- RV-28's /5 replacement keeps every control of the /3 fixture and reserves its quota slot atomically (the race
+  itself is exercised in test_release_fixture_quota.py).
+"""
+
+from __future__ import annotations
+
+import ast
+import json
+import os
+import re
+import unittest
+
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+FIX = os.path.join(REPO, "tests", "fixtures")
+V1 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-manifest.json")
+V2 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-v2-manifest.json")
+V3 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-v3-manifest.json")
+V4 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-v4-manifest.json")
+V5 = os.path.join(REPO, "tests", "validation", "v4-release-corpus-v5-manifest.json")
+REPLACED_V2 = {"RV-02", "RV-04", "RV-13", "RV-20", "RV-22", "RV-24", "RV-35", "RV-37"}
+REPLACED_V3 = REPLACED_V2 | {"RV-15", "RV-26", "RV-28"}
+REPLACED_UNSAFE_V4 = {"RV-29"}
+PERSONAL = re.compile(r"\b(user(name)?s?|e-?mail|password|account|balance|phone|ssn|birth|owner)\b", re.I)
+
+
+def _read(*parts):
+    with open(os.path.join(REPO, *parts), encoding="utf-8") as fh:
+        return fh.read()
+
+
+def _load(p):
+    with open(p, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _code(path):
+    """Source without comment lines (the corpus strips header comments before review)."""
+    with open(path, encoding="utf-8") as fh:
+        return "\n".join(ln for ln in fh.read().splitlines() if not ln.lstrip().startswith(("//", "#")))
+
+
+def _v3_table():
+    return [ln for ln in _read("tests", "validation", "expected-results.md").splitlines() if ln.startswith("| `")]
+
+
+class ManifestTests(unittest.TestCase):
+    def check_manifest(self, path, version, replaced, current=False, replaced_unsafe=frozenset()):
+        m = _load(path)
+        self.assertEqual(m["version"], version)
+        self.assertEqual([r["caseId"] for r in m["rows"]], [f"RV-{n:02d}" for n in range(1, 40)])
+        table = _v3_table()
+        self.assertEqual(len(table), 39)
+        doc = _read("tests", "validation", "v4-release-corpus.md")
+        for r in m["rows"]:
+            with self.subTest(manifest=version, row=r["caseId"]):
+                base = r["fixture"].rstrip("/")
+                self.assertTrue(os.path.exists(os.path.join(FIX, base)), base)
+                if r["caseId"] in replaced or r["caseId"] in replaced_unsafe:
+                    self.assertTrue(base.startswith("v4_release/"))
+                    unsafe = r["caseId"] in replaced_unsafe
+                    self.assertEqual(r["expected"], "CONFIRMED" if unsafe else "NO_CONFIRMED")
+                    self.assertEqual("expectedFindings" in r, unsafe)
+                    self.assertEqual(r["expectationSource"], "tests/validation/v4-release-corpus.md")
+                    old = r["replaces"]["fixture"]
+                    hits = [ln for ln in table if f"`{old}`" in ln or f"`{old}/`" in ln]
+                    self.assertEqual(len(hits), 1, old)
+                    self.assertEqual("No confirmed finding" in hits[0], not unsafe)
+                    if current:
+                        self.assertIn(f"`tests/fixtures/{base}", doc)
+                    self.assertTrue(os.path.exists(os.path.join(FIX, old)), old)
+                    if not version.endswith("/1"):
+                        self.assertTrue(r["replaces"].get("reason"))
+                else:
+                    self.assertNotIn("replaces", r)
+                    self.assertNotIn("expectedFindings", r)
+                    self.assertEqual(r["expectationSource"], "tests/validation/expected-results.md")
+                    hits = [ln for ln in table if f"`{base}`" in ln or f"`{base}/`" in ln]
+                    if r["member"]:
+                        hits = [ln for ln in hits if f"`{r['member']}`" in ln]
+                    self.assertEqual(len(hits), 1, r)
+                    self.assertEqual("No confirmed finding" not in hits[0], r["expected"] in ("CONFIRMED", "STILL_VULNERABLE"))
+
+    def test_v1_record(self):
+        self.check_manifest(V1, "v4-release-corpus/1", {"RV-02"})
+
+    def test_v2_record(self):
+        self.check_manifest(V2, "v4-release-corpus/2", REPLACED_V2)
+        self.assertEqual(_load(V2)["supersedes"], "v4-release-corpus/1")
+
+    def test_v3_record(self):
+        self.check_manifest(V3, "v4-release-corpus/3", REPLACED_V3)
+        self.assertEqual(_load(V3)["supersedes"], "v4-release-corpus/2")
+        rows = {r["caseId"]: r for r in _load(V3)["rows"]}
+        for cid, prev in (("RV-04", "v4_release/command_argument_array_allowlisted_safe.js"),
+                          ("RV-24", "v4_release/public_document_download_safe.cs"),
+                          ("RV-37", "v4_release/cross_file_public_manual_download_safe")):
+            self.assertEqual(rows[cid]["replaces"]["previousV4Fixture"], prev)
+            self.assertTrue(os.path.exists(os.path.join(FIX, prev)), prev)
+
+    def test_v4_record(self):
+        self.check_manifest(V4, "v4-release-corpus/4", REPLACED_V3, replaced_unsafe=REPLACED_UNSAFE_V4)
+        self.assertEqual(_load(V4)["supersedes"], "v4-release-corpus/3")
+        v3 = {r["caseId"]: r for r in _load(V3)["rows"]}
+        for r in _load(V4)["rows"]:
+            if r["caseId"] not in REPLACED_UNSAFE_V4:
+                self.assertEqual(r, v3[r["caseId"]], r["caseId"])
+        self.assertEqual(_load(V4)["enterpriseIdentity"], _load(V3)["enterpriseIdentity"])
+
+    def test_v5_current(self):
+        self.check_manifest(V5, "v4-release-corpus/5", REPLACED_V3, current=True, replaced_unsafe=REPLACED_UNSAFE_V4)
+        self.assertEqual(_load(V5)["supersedes"], "v4-release-corpus/4")
+        v4 = {r["caseId"]: r for r in _load(V4)["rows"]}
+        for r in _load(V5)["rows"]:
+            if r["caseId"] != "RV-28":
+                self.assertEqual(r, v4[r["caseId"]], r["caseId"])
+        rv28 = next(r for r in _load(V5)["rows"] if r["caseId"] == "RV-28")
+        self.assertEqual(rv28["fixture"], "v4_release/file_upload_authenticated_quota_atomic_safe.py")
+        self.assertEqual(rv28["replaces"]["previousV4Fixture"], "v4_release/file_upload_authenticated_safe.py")
+        self.assertEqual(rv28["replaces"]["rowId"], v4["RV-28"]["replaces"]["rowId"])
+        self.assertTrue(os.path.exists(os.path.join(FIX, rv28["replaces"]["previousV4Fixture"])))
+        self.assertEqual(_load(V5)["enterpriseIdentity"], _load(V4)["enterpriseIdentity"])
+
+    def test_v2_to_v5_keep_every_form_and_member_of_v1(self):
+        v1 = {r["caseId"]: r for r in _load(V1)["rows"]}
+        for r in _load(V2)["rows"] + _load(V3)["rows"] + _load(V4)["rows"] + _load(V5)["rows"]:
+            with self.subTest(row=r["caseId"]):
+                self.assertEqual((r["form"], r["member"], r["expected"]), (v1[r["caseId"]]["form"], v1[r["caseId"]]["member"], v1[r["caseId"]]["expected"]))
+
+    def test_the_v3_sources_are_still_present_and_the_corpus_says_it_is_not_a_comparison(self):
+        for name in ("sql_injection_safe.py", "command_injection_safe.js", "cookie_secure_safe.js", "redirect_local_safe.cs",
+                     "ssrf_allowlist_safe.py", "path_traversal_safe.cs", "cross_file_sql_safe", "cross_file_path_traversal_safe",
+                     "upload_webroot_content_disposition_deceptive.cs"):
+            self.assertTrue(os.path.exists(os.path.join(FIX, name)), name)
+        self.assertIn("not a V3-versus-V4 comparison set", _read("tests", "validation", "v4-release-corpus.md"))
+
+
+class Rv02CatalogTests(unittest.TestCase):
+    def setUp(self):
+        with open(os.path.join(FIX, "v4_release", "catalog_lookup_parameterized_safe.py"), encoding="utf-8") as fh:
+            self.tree = ast.parse(fh.read())
+
+    def test_every_query_is_a_fixed_parameterized_string(self):
+        calls = [n for n in ast.walk(self.tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "execute"]
+        self.assertEqual(len(calls), 1)
+        sql = calls[0].args[0]
+        self.assertIsInstance(sql, ast.Constant)
+        self.assertIn("?", sql.value)
+        self.assertIsInstance(calls[0].args[1], ast.Tuple)
+        self.assertEqual(sql.value.count("?"), len(calls[0].args[1].elts))
+        m = re.match(r"\s*SELECT\s+(.*?)\s+FROM\s+(\w+)", sql.value, re.I | re.S)
+        self.assertEqual({c.strip() for c in m.group(1).split(",")}, {"sku", "name", "category", "description"})
+        self.assertEqual(m.group(2), "products")
+
+    def test_the_response_exposes_only_catalog_fields(self):
+        keys = {k.value for n in ast.walk(self.tree) if isinstance(n, ast.Dict) for k in n.keys if isinstance(k, ast.Constant)}
+        self.assertEqual(keys - {"products"}, {"sku", "name", "category", "description"})
+
+
+class Rv04ArgumentArrayTests(unittest.TestCase):
+    def setUp(self):
+        self.code = _code(os.path.join(FIX, "v4_release", "command_argument_array_allowlisted_safe.js"))
+
+    def test_argument_array_without_a_shell(self):
+        self.assertIn("execFile(", self.code)
+        self.assertNotRegex(self.code, r"\bexec\(|spawn\(|shell\s*:")
+        self.assertRegex(self.code, r"execFile\(\s*'convert',")
+
+    def test_no_request_value_reaches_the_program_unmapped(self):
+        args = re.search(r"execFile\(\s*'convert',\s*\[(.*?)\]", self.code, re.S).group(1)
+        self.assertNotIn("req.", args)
+        self.assertEqual([a.strip() for a in args.split(",")], ["source", "'-resize'", "`${size}x${size}`", "'png:-'"])
+        self.assertRegex(self.code, r"const source = ASSETS\.get\(")
+        self.assertRegex(self.code, r"new Map\(\[")
+        self.assertIn("Number.isInteger(size)", self.code)
+        self.assertNotRegex(self.code, r"endsWith|extname|\.png'\)")
+
+
+class Rv13CookieTests(unittest.TestCase):
+    def test_flags_random_value_and_no_login_semantics(self):
+        code = _code(os.path.join(FIX, "v4_release", "cookie_flags_anonymous_session_safe.js"))
+        for flag in ("httpOnly: true", "secure: true", "sameSite: 'strict'"):
+            self.assertIn(flag, code)
+        self.assertIn("crypto.randomBytes(32)", code)
+        self.assertNotRegex(code, r"(?i)login|password|logged in|user")
+
+
+class Rv20RedirectTests(unittest.TestCase):
+    def test_local_redirect_only_and_no_credentials(self):
+        code = _code(os.path.join(FIX, "v4_release", "local_redirect_preferences_safe.cs"))
+        self.assertIn("!Url.IsLocalUrl(returnUrl)", code)
+        self.assertIn("return LocalRedirect(returnUrl);", code)
+        self.assertIn("[ValidateAntiForgeryToken]", code)
+        self.assertIn("SupportedCultures.Contains(culture)", code)
+        self.assertNotRegex(code, r"(?i)password|login|username")
+        self.assertNotRegex(code, r"\bRedirect\(returnUrl")
+
+
+class Rv22SsrfTests(unittest.TestCase):
+    def setUp(self):
+        with open(os.path.join(FIX, "v4_release", "ssrf_allowlist_pinned_safe.py"), encoding="utf-8") as fh:
+            self.src = fh.read()
+        self.code = _code(os.path.join(FIX, "v4_release", "ssrf_allowlist_pinned_safe.py"))
+
+    def test_allowlist_public_address_and_pinned_connection(self):
+        self.assertIn("parsed.hostname not in ALLOWED_HOSTS", self.code)
+        self.assertIn('parsed.scheme != "https"', self.code)
+        self.assertIn(".is_global", self.code)
+        self.assertRegex(self.code, r"HTTPSConnectionPool\(\s*address,")
+        for kw in ("server_hostname=parsed.hostname", "assert_hostname=parsed.hostname", 'cert_reqs="CERT_REQUIRED"', "retries=False"):
+            self.assertIn(kw, self.code)
+        self.assertIn("redirect=False", self.code)
+        self.assertIn("resp.read(MAX_BYTES + 1)", self.code)
+        self.assertNotRegex(self.code, r"requests\.(get|post|request)|urlopen\(image_url")
+        ast.parse(self.src)
+
+    def test_returns_only_size_or_error(self):
+        keys = set(re.findall(r'jsonify\(\{"(\w+)"', self.code))
+        self.assertEqual(keys, {"error", "status"})
+
+
+class PublicManualTests(unittest.TestCase):
+    def test_rv24_containment_public_content_and_no_links(self):
+        code = _code(os.path.join(FIX, "v4_release", "public_document_download_safe.cs"))
+        self.assertIn("Path.GetFullPath(Path.Combine(_baseDir, fileName))", code)
+        self.assertIn("StartsWith(_baseDir + Path.DirectorySeparatorChar, StringComparison.Ordinal)", code)
+        self.assertIn("FileAttributes.ReparsePoint", code)
+        self.assertIn("/var/app/published-manuals", code)
+        self.assertNotRegex(code, r"(?i)upload|report|user")
+
+    def test_rv37_containment_across_three_files(self):
+        d = os.path.join(FIX, "v4_release", "cross_file_public_manual_download_safe")
+        self.assertEqual(sorted(os.listdir(d)), ["ManualDownloadController.cs", "ManualFileService.cs", "ManualPathHelper.cs"])
+        helper = _code(os.path.join(d, "ManualPathHelper.cs"))
+        self.assertIn('Path.GetFullPath("/var/app/published-manuals") + Path.DirectorySeparatorChar', helper)
+        self.assertIn("canonical.StartsWith(_manualsDir, StringComparison.Ordinal)", helper)
+        self.assertIn("FileAttributes.ReparsePoint", helper)
+        service = _code(os.path.join(d, "ManualFileService.cs"))
+        self.assertIn("Path.GetFileName(path)", service)
+        for f in os.listdir(d):
+            self.assertNotRegex(_code(os.path.join(d, f)), r"(?i)upload|report|user")
+
+
+class Rv35CatalogSearchTests(unittest.TestCase):
+    def test_parameterized_like_across_three_files_and_catalog_fields_only(self):
+        d = os.path.join(FIX, "v4_release", "cross_file_catalog_search_safe")
+        self.assertEqual(sorted(os.listdir(d)), ["ProductRepository.cs", "ProductSearchService.cs", "ProductsController.cs"])
+        repo = _code(os.path.join(d, "ProductRepository.cs"))
+        sql = re.search(r'new SqlCommand\(\s*"([^"]+)"', repo).group(1)
+        self.assertIn("@query", sql)
+        self.assertNotRegex(repo, r'"\s*\+\s*query|query\s*\+\s*"|\$"')
+        self.assertIn('command.Parameters.AddWithValue("@query", query);', repo)
+        cols = re.match(r"SELECT TOP \(50\) (.*?) FROM Products", sql).group(1)
+        self.assertEqual({c.strip() for c in cols.split(",")}, {"Sku", "Name", "Category"})
+        for f in os.listdir(d):
+            self.assertIsNone(PERSONAL.search(_code(os.path.join(d, f))), f)
+
+
+class Revision3FixtureTests(unittest.TestCase):
+    """Controls the strict audit required to be visible inside the case (work/v4-release/safe-fixture-audit.md)."""
+
+    def test_rv04_bounded_work_and_same_argument_rules(self):
+        code = _code(os.path.join(FIX, "v4_release", "command_argument_array_bounded_safe.js"))
+        args = re.search(r"execFile\(\s*'convert',\s*\[(.*?)\]", code, re.S).group(1)
+        self.assertEqual([a.strip() for a in args.split(",")], ["source", "'-resize'", "`${size}x${size}`", "'png:-'"])
+        self.assertNotRegex(code, r"\bexec\(|spawn\(|shell\s*:")
+        self.assertIn("if (running >= MAX_CONCURRENT)", code)
+        self.assertIn("res.status(429)", code)
+        self.assertEqual(code.count("running += 1"), 1)
+        self.assertEqual(code.count("running -= 1"), 1)
+        self.assertRegex(code, r"const source = ASSETS\.get\(")
+
+    def test_rv15_session_middleware_and_route_guard_are_in_the_case(self):
+        code = _code(os.path.join(FIX, "v4_release", "cors_allowlist_session_guarded_safe.js"))
+        self.assertIn("require('express-session')", code)
+        self.assertRegex(code, r"SESSION_SECRET\.length < 32\)\s*\{\s*throw")
+        for opt in ("httpOnly: true", "secure: true", "sameSite: 'lax'", "saveUninitialized: false"):
+            self.assertIn(opt, code)
+        self.assertIn("typeof req.session.userId !== 'number'", code)
+        self.assertIn("res.status(401)", code)
+        self.assertRegex(code, r"app\.get\('/api/preferences', requireSignedIn,")
+        self.assertIn("ALLOWED_ORIGINS.has(origin)", code)
+        self.assertIn("res.vary('Origin')", code)
+        self.assertEqual(len(re.findall(r"app\.(get|post|put|delete|patch)\(", code)), 1)
+        self.assertNotRegex(code, r"(?i)email|balance|account|password")
+
+    def check_no_links(self, code, file_var, base_expr):
+        plain = code.replace("System.IO.", "")
+        self.assertIn(f"(File.GetAttributes({file_var}) & FileAttributes.ReparsePoint) != 0", plain)
+        self.assertRegex(code, r"for \(var dir = Path\.GetDirectoryName\(" + file_var + r"\); dir is not null && dir\.Length >= " + base_expr)
+        self.assertIn("(File.GetAttributes(dir) & FileAttributes.ReparsePoint) != 0", plain)
+
+    def test_rv24_rv26_rv37_follow_no_links(self):
+        rv24 = _code(os.path.join(FIX, "v4_release", "public_document_download_nolinks_safe.cs"))
+        self.check_no_links(rv24, "resolved", r"_baseDir\.Length")
+        self.assertIn("StartsWith(_baseDir + Path.DirectorySeparatorChar, StringComparison.Ordinal)", rv24)
+        rv26 = _code(os.path.join(FIX, "v4_release", "path_prefix_canonicalized_nolinks_safe.cs"))
+        self.check_no_links(rv26, "canonical", r"baseDir\.Length")
+        self.assertIn('Path.GetFullPath("/var/app/reports") + Path.DirectorySeparatorChar', rv26)
+        self.assertIn("canonical.StartsWith(_reportsDir, StringComparison.Ordinal)", rv26)
+        d = os.path.join(FIX, "v4_release", "cross_file_public_manual_download_nolinks_safe")
+        self.assertEqual(sorted(os.listdir(d)), ["ManualDownloadController.cs", "ManualFileService.cs", "ManualPathHelper.cs"])
+        rv37 = _code(os.path.join(d, "ManualPathHelper.cs"))
+        self.check_no_links(rv37, "canonical", r"baseDir\.Length")
+        self.assertIn("canonical.StartsWith(_manualsDir, StringComparison.Ordinal)", rv37)
+        for f in os.listdir(d):
+            self.assertNotRegex(_code(os.path.join(d, f)), r"(?i)upload|report|user")
+
+    def test_rv28_access_control_cookie_and_upload_rules_are_in_the_case(self):
+        path = os.path.join(FIX, "v4_release", "file_upload_authenticated_safe.py")
+        code = _code(path)
+        with open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+        upload = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "upload")
+        self.assertEqual([ast.unparse(d) for d in upload.decorator_list],
+                         ["app.route('/upload', methods=['POST'])", "signed_in_required"])
+        self.assertIn('isinstance(session.get("user_id"), int)', code)
+        self.assertIn("abort(401)", code)
+        for cfg in ("SESSION_COOKIE_HTTPONLY=True", "SESSION_COOKIE_SECURE=True", 'SESSION_COOKIE_SAMESITE="Strict"',
+                    "MAX_CONTENT_LENGTH=5 * 1024 * 1024"):
+            self.assertIn(cfg, code)
+        self.assertRegex(code, r"if len\(SECRET_KEY\) < 32:\s*raise")
+        self.assertIn("sniff_extension(data)", code)
+        self.assertIn('f"{uuid.uuid4().hex}.{ext}"', code)
+        self.assertIn("MAX_FILES_PER_USER", code)
+        self.assertNotIn("f.filename", code)
+        self.assertNotRegex(code, r"static")
+
+
+class Revision4Rv29HostingTests(unittest.TestCase):
+    """RV-29 (/4): the hosting path the stored-XSS impact depends on is code inside the case."""
+    NEW = os.path.join(FIX, "v4_release", "upload_static_hosted_program_deceptive.cs")
+    OLD = os.path.join(FIX, "upload_webroot_content_disposition_deceptive.cs")
+
+    def setUp(self):
+        self.code = _code(self.NEW)
+        self.row = next(r for r in _load(V4)["rows"] if r["caseId"] == "RV-29")
+
+    def test_static_files_publish_the_upload_directory(self):
+        self.assertEqual(self.code.count("app.UseStaticFiles("), 1)
+        hosting = re.search(r"app\.UseStaticFiles\(new StaticFileOptions\s*\{(.*?)\}\);", self.code, re.S).group(1)
+        self.assertIn("FileProvider = new PhysicalFileProvider(UploadStorage.Directory)", hosting)
+        self.assertIn("RequestPath = UploadStorage.RequestPath", hosting)
+        self.assertIn("ContentTypeProvider = new FileExtensionContentTypeProvider()", hosting)
+        self.assertIn('public const string RequestPath = "/uploads";', self.code)
+        self.assertEqual(len(re.findall(r"public static readonly string Directory\b", self.code)), 1)
+        self.assertLess(self.code.index("app.UseStaticFiles("), self.code.index("app.MapControllers();"))
+        self.assertIn("app.Run();", self.code)
+
+    def test_upload_writes_the_client_name_into_the_published_directory(self):
+        self.assertIn("var path = Path.Combine(UploadStorage.Directory, file.FileName);", self.code)
+        self.assertIn("System.IO.File.Create(path)", self.code)
+        self.assertNotRegex(self.code, r"GetExtension|GetFileName\(|ContentType ==|StartsWith|GetFullPath|AllowedExtensions")
+
+    def test_download_reads_the_query_name_and_only_sets_content_disposition(self):
+        self.assertIn("public IActionResult Download([FromQuery] string name)", self.code)
+        self.assertIn("var path = Path.Combine(UploadStorage.Directory, name);", self.code)
+        self.assertIn("System.IO.File.ReadAllBytes(path)", self.code)
+        self.assertIn('Response.Headers.Append("Content-Disposition", $"attachment;', self.code)
+
+    def test_three_separately_bound_expected_findings(self):
+        fs = self.row["expectedFindings"]
+        self.assertEqual([f["id"] for f in fs], ["upload-write-traversal", "download-read-traversal", "upload-stored-xss"])
+        self.assertEqual([f["group"] for f in fs], ["traversal", "traversal", "stored-xss"])
+        lines = self.code.split("\n")
+        for f in fs:
+            for anchor in f["evidence"]:
+                with self.subTest(finding=f["id"], anchor=anchor["start"]):
+                    starts = [i for i, ln in enumerate(lines) if anchor["start"] in ln]
+                    self.assertEqual(len(starts), 1)
+                    self.assertTrue(any(anchor["end"] in ln for ln in lines[starts[0]:starts[0] + 30]))
+        xss = fs[2]["evidence"]
+        self.assertEqual([a["start"] for a in xss], ["app.UseStaticFiles(", "public async Task<IActionResult> Upload("])
+
+    def test_the_v3_fixture_has_no_hosting_code_to_bind_the_stored_xss_finding(self):
+        old = _code(self.OLD)
+        self.assertNotIn("UseStaticFiles", old)
+        self.assertNotIn("StaticFileOptions", old)
+        hosting = self.row["expectedFindings"][2]["evidence"][0]["start"]
+        self.assertFalse(any(hosting in ln for ln in old.split("\n")))
+        with open(self.OLD, encoding="utf-8") as fh:
+            self.assertIn("UseStaticFiles()", fh.read())   # asserted in its comments only
+
+
+class Revision5Rv28QuotaTests(unittest.TestCase):
+    """RV-28 (/5): the /3 fixture's controls are all kept; only the quota changes, to an atomic reservation."""
+    OLD = os.path.join(FIX, "v4_release", "file_upload_authenticated_safe.py")
+    NEW = os.path.join(FIX, "v4_release", "file_upload_authenticated_quota_atomic_safe.py")
+
+    def test_every_control_of_the_previous_fixture_is_kept(self):
+        code = _code(self.NEW)
+        with open(self.NEW, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+        upload = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "upload")
+        self.assertEqual([ast.unparse(d) for d in upload.decorator_list],
+                         ["app.route('/upload', methods=['POST'])", "signed_in_required"])
+        self.assertIn('isinstance(session.get("user_id"), int)', code)
+        for cfg in ("SESSION_COOKIE_HTTPONLY=True", "SESSION_COOKIE_SECURE=True", 'SESSION_COOKIE_SAMESITE="Strict"',
+                    "MAX_CONTENT_LENGTH=5 * 1024 * 1024"):
+            self.assertIn(cfg, code)
+        self.assertRegex(code, r"if len\(SECRET_KEY\) < 32:\s*raise")
+        self.assertIn("sniff_extension(data)", code)
+        self.assertIn('f"{uuid.uuid4().hex}.{ext}"', code)
+        self.assertNotIn("f.filename", code)
+        self.assertNotRegex(code, r"static")
+
+    def test_the_quota_is_an_exclusive_create_per_slot_released_on_failure(self):
+        code = _code(self.NEW)
+        self.assertIn("fd = os.open(slot, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)", code)
+        self.assertIn("for number in range(MAX_FILES_PER_USER):", code)
+        self.assertNotIn("listdir", code)
+        self.assertRegex(code, r"except BaseException:\s*if created:\s*os\.unlink\(path\)\s*os\.unlink\(slot\)\s*raise")
+        self.assertIn("if generated_name is None:\n        abort(429", code)
+        self.assertIn("if len(os.listdir(user_dir)) >= MAX_FILES_PER_USER:", _code(self.OLD))   # regression input kept
+
+
+if __name__ == "__main__":
+    unittest.main()

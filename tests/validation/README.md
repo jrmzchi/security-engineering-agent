@@ -10,7 +10,11 @@ running a review against the fixtures below and comparing the result to
 ## How to run a validation pass
 
 1. Point `skills/security-review` at `tests/fixtures/` — treat it as
-   the repository under review (a QUICK or STANDARD review is
+   the repository under review (for this V3 corpus pass, exclude
+   `tests/fixtures/enterprise_identity/`, which is the V4 Batch 4
+   capability's own, separately reported set — see
+   `v4-enterprise-identity-test-cases.md` — and
+   `tests/fixtures/caller_scope/`, see `v4-caller-scope-expected-results.md`) (a QUICK or STANDARD review is
    sufficient; these are small, isolated files, not a real project).
 2. For each fixture, record what the review produced: no finding, or a
    finding with its severity/confidence and CONFIRMED/REJECTED/NEEDS

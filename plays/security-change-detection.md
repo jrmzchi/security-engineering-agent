@@ -17,7 +17,84 @@ behavior change
 ```
 
 Action: **no security workflow.** Do not run a scanner, do not load a
-play, do not produce a security summary for this change.
+play, do not produce a security summary for this change. **One
+exception:** when the scope shows both halves of a signal pair in
+"Domains a signal pair requires" below, the pair's domain is still
+required. The NONE gate below builds its TARGETED manifest; review that
+domain only (read its play), at the MINIMAL budget. The pair adds that one domain;
+it confirms nothing.
+
+**`[V4 release hardening]` Run the NONE gate before stopping.** A NONE
+classification of the actual diff does not stop the workflow by
+itself. First run the gate on the change's files (the
+files the diff touches as they are after it, untracked files included,
+deleted files left out; whole files, not the diff):
+
+```text
+python -m tools.context_manifest.cli none-gate --root <repository root> <file>...
+```
+
+Run it from the kit's root (where `tools/` is); the files are relative
+to `--root`, the repository under review.
+
+- Exit 0 with `STOP_NONE`: stop at NONE. The gate gives this only when
+  every file was read, every file is plain UTF-8 text (no NUL byte, the
+  whole file valid UTF-8), and no signal pair was found.
+- Exit 1 with `TARGETED_EXCEPTION <domain>`: take the exception above
+  for that domain. The gate has already built the exception's manifest
+  with `produce_manifest()` (the same files' texts as `scope_texts`, the
+  built-in producer, no Jev) and validated it: it is the last line,
+  `manifest: <json>`. **Use that manifest for the review** -- its
+  domains, budget and scanners. Do not write, edit or rebuild a manifest
+  by hand. Each `unread:` line names a file the gate could not read: the
+  exception's report lists it as not covered.
+- If the gate reports that a signal pair requires a domain but the
+  exception's manifest could not be built or validated (exit 2
+  `MANUAL_CHECK` with that reason): do not stop at NONE, and do not write
+  a manifest yourself. Review that domain by hand at the MINIMAL budget,
+  and report that no validated manifest exists as a coverage gap. With no
+  manifest there is no scanner selection: run no scanner, and record the
+  missing manifest in `coverageGaps`.
+- Anything else (exit 2 `MANUAL_CHECK`, other output, or the command
+  cannot run, for example no Python 3): do not stop silently. An
+  `unread:` line saying a file "cannot be decoded reliably" is a file
+  that is not plain UTF-8 text: UTF-16/32, a legacy encoding whose
+  bytes are not valid UTF-8, a file that mixes encodings, or a binary
+  file. (A 7-bit encoding such as UTF-7 or ISO-2022 is valid UTF-8 and
+  is not caught.) Do the
+  manual check: read those files for both halves of each pair in
+  "Domains a signal pair requires". Both halves found: take the
+  exception without a manifest, as for a manifest that could not be built
+  (the gate did not build one): read that domain's play only, run no
+  scanner, and record "no validated manifest" in `coverageGaps`. Otherwise you may stop at NONE only if you had reliable
+  text for **every** file: a file the gate could not read reliably, or
+  that you could not read as text yourself, does not count as checked
+  just because you saw no signal in it. For such a file, either get its
+  real text (for example from its known encoding) and check that, or take
+  the exception's web-security review anyway, conservatively, and list
+  the file as not covered. When you do stop, say in one line that the
+  NONE gate did not permit the stop, why, and what the manual check
+  found.
+
+Noticing the pair yourself is an extra trigger for the exception, never
+a reason to skip the gate. At the pre-code classification there are no
+files yet: NONE there only skips the design step, and the gate runs when
+the actual diff is re-classified. The gate is code
+(`tools/context_manifest/none_gate.py`), but nothing forces an agent to
+call it: this step is where it is required.
+
+**What the exception runs and reports:**
+- the pair's domain only: its play and no other, no design step, the
+  MINIMAL budget;
+- the scanners the manifest selects for that domain (`scannersSelected`)
+  and no other; a selected scanner that is unavailable or fails is
+  recorded in `coverageGaps`;
+- a finding is validated (`plays/finding-validation.md`), goes through
+  `skills/security-gate`, and is reported like any other finding;
+- no finding: one line naming the check (the signal-pair exception and
+  its domain), the files it covered (and any it could not read) and the
+  result, with any `coverageGaps`. Say nothing about other domains: the change was not
+  reviewed for them.
 
 ### LOW
 
@@ -66,7 +143,9 @@ execution, shell execution, dynamic code execution, CORS, security
 middleware, privilege changes, secret storage, external
 callbacks/webhooks, SSRF-sensitive network behavior, deserialization,
 deployment security configuration, rendering attacker-influenced data
-into HTML/DOM/a template (output encoding, XSS-adjacent)
+into HTML/DOM/a template (output encoding, XSS-adjacent), enterprise
+identity integration (SSO/OIDC, AD/LDAP directory access, Windows
+Integrated Authentication)
 ```
 
 Action: **security design required before implementation when the
@@ -86,6 +165,28 @@ an unnecessary targeted review. Those failure modes are not symmetric
 — see `plays/finding-validation.md`'s bias toward under-reporting over
 false assurance, which applies to workflow selection here the same way
 it applies to individual findings there.
+
+## Domains a signal pair requires
+
+Choosing `domains` is item 0's own reasoning, and the domains are a
+minimum (see `skills/security-review/SKILL.md` step 5). Some pairs of
+signals require a domain whatever else the scope does, and whatever the
+sensitivity, NONE included. When both halves appear, include the domain:
+
+```text
+ambient browser credential           + state-changing endpoint
+  (cookie authentication, a server      (POST/PUT/PATCH/DELETE, or a GET
+  session cookie, Windows Integrated    whose route names a state-changing
+  Authentication)                       action such as delete or update)
+  -> web-security (CSRF: the browser attaches the credential to a
+     cross-site request by itself; whether antiforgery, SameSite or a
+     custom header actually holds is the review's question)
+```
+
+`tools/context_manifest/signal_floor.py` applies the same rule
+deterministically when the manifest is built from the scope's file texts.
+If item 0 misses the domain, the manifest still carries it. It only adds
+domains; it never removes one.
 
 ## Detection signals
 
@@ -118,6 +219,10 @@ Configuration:
   authentication configuration authorization configuration CORS
   configuration TLS configuration security headers package manifests
   lock files CI/CD security configuration
+
+Enterprise identity (AD/SSO):
+  the signals in plays/enterprise-identity-security.md's "When this
+  play applies" (kept there, in one place)
 ```
 
 ## Classify from intent, before code exists
@@ -157,3 +262,7 @@ For a NONE classification, do not produce a security summary, do not
 mention that "no issues were found" (nothing was checked), and do not
 pad the response with unnecessary security framing — see
 `plays/secure-development-workflow.md`'s completion-summary guidance.
+**Except the signal-pair exception, which reports what it checked**, as
+the NONE action says: a finding like any finding, or one line for no
+finding, limited to that domain. A NONE gate that did not run is also
+stated in one line. Neither is a security summary of the change.

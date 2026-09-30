@@ -142,6 +142,36 @@ check_tool python3 python3
 check_tool pip3 pip3
 check_tool pip-audit pip-audit
 
+# [ADDED, V4 Batch 0] This kit's OWN runtime dependency (tools/context_manifest/,
+# invoked by scripts/*/consistency-check.* -- see tools/README.md), NOT
+# the target repository's ecosystem -- unlike the "python3" row above,
+# this one is never downgraded to OPTIONAL by HAS_PYTHON below, since
+# it is required regardless of what ecosystem the reviewed repository
+# happens to use. Reuses the same "actually invoke it" check
+# consistency-check.sh's own PYTHON_BIN detection uses -- command -v
+# alone is not enough: on Windows, a "python3"/"python" name on PATH
+# can be a non-functional App Execution Alias stub.
+V4_PYTHON_BIN=""
+for candidate in python3 python; do
+    # [FIXED, per independent review]: also require 3.7+, not just
+    # "runs at all" -- see scripts/macos/consistency-check.sh's
+    # matching comment on its own probe.
+    if command -v "$candidate" >/dev/null 2>&1 && \
+       "$candidate" -c "import sys; sys.exit(0 if sys.version_info >= (3, 7) else 1)" >/dev/null 2>&1; then
+        V4_PYTHON_BIN="$candidate"
+        break
+    fi
+done
+if [ -n "$V4_PYTHON_BIN" ]; then
+    STATUS[python-v4]="FOUND"
+    VERSION[python-v4]="$("$V4_PYTHON_BIN" --version 2>&1 | head -n1) (as: $V4_PYTHON_BIN)"
+    PATHOF[python-v4]="$(command -v "$V4_PYTHON_BIN")"
+else
+    STATUS[python-v4]="MISSING"
+    VERSION[python-v4]=""
+    PATHOF[python-v4]=""
+fi
+
 # Ecosystem-native tools are only "required" (MISSING) when their
 # ecosystem is actually present in this repo; otherwise OPTIONAL.
 # Trivy overlaps with osv-scanner/gitleaks, so it stays OPTIONAL even
@@ -155,7 +185,7 @@ check_tool pip-audit pip-audit
 [ "${STATUS[trivy]}" = "MISSING" ] && STATUS[trivy]="OPTIONAL"
 
 printf "%-14s %-10s %-15s %s\n" "TOOL" "STATUS" "VERSION" "PATH"
-for name in git semgrep gitleaks osv-scanner trivy dotnet node npm python3 pip3 pip-audit; do
+for name in git semgrep gitleaks osv-scanner trivy dotnet node npm python3 pip3 pip-audit python-v4; do
     printf "%-14s %-10s %-15s %s\n" "$name" "${STATUS[$name]}" "${VERSION[$name]:-'-'}" "${PATHOF[$name]:-'-'}"
 done
 
@@ -167,7 +197,7 @@ echo "  Python (requirements/pyproject/setup/Pipfile): $HAS_PYTHON"
 
 MISSING_LIST=()
 FAILED_LIST=()
-for name in git semgrep gitleaks osv-scanner trivy dotnet node npm python3 pip3 pip-audit; do
+for name in git semgrep gitleaks osv-scanner trivy dotnet node npm python3 pip3 pip-audit python-v4; do
     [ "${STATUS[$name]}" = "MISSING" ] && MISSING_LIST+=("$name")
     [ "${STATUS[$name]}" = "FAILED" ] && FAILED_LIST+=("$name")
 done

@@ -23,7 +23,8 @@ TARGETED   ordinary development-time changes, driven by
 ```
 
 TARGETED reviews only the domains `skills/security-change-detection`
-identified for the current change (its detection-signal categories —
+identified for the current change (a minimum for play loading, not a
+boundary on findings — see `skills/security-review/SKILL.md` step 5) (its detection-signal categories —
 e.g. "this diff matched the authorization and filesystem signal
 groups"), using the *same* domain-to-play table QUICK/STANDARD/DEEP
 already use (see above) — not a separate routing table, just a

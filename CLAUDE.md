@@ -40,7 +40,9 @@ as a review request — see `AGENTS.md`'s "Before implementing a
 meaningful software change" for the routing summary and
 `plays/secure-development-workflow.md` for the full procedure. This is
 proportional (a NONE/LOW-sensitivity change gets none of it, per
-`skills/security-change-detection`) — it is not a mandate to run a full
+`skills/security-change-detection`, apart from the one signal-pair
+exception in `plays/security-change-detection.md`, checked by its NONE
+gate) — it is not a mandate to run a full
 audit on every change.
 
 ## Practical entry points

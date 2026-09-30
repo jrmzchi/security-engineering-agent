@@ -171,6 +171,26 @@ now formalizes scoring it, both from a map and qualitatively without
 one; this play only establishes the invalidation-scope exception
 itself, why, and this bound on it.
 
+**`[V4 Batch 1]` This same exception, and this play's own ordinary
+direct-lookup mechanism, extend to `.security/feedback.json`'s
+rejection records** (`tools/feedback_store/invalidation.py`) —
+Feedback records have no node/edge graph, so the "widen the edges
+around a directly-hit node" mechanic above does not apply verbatim;
+instead, the caller (having already judged a changed file to be this
+central, the same judgment call this section already asks for)
+explicitly names which categories and/or path prefixes the central
+component affects, and every Feedback record matching one of those is
+flagged for re-check — bounded by that explicit list, never "the
+entire feedback store." **This is the SAME narrower list this section
+already names** (central routing, authentication/authorization
+bootstrap, or other configuration) — not
+`plays/review-budget.md`'s broader "Changed attack-surface centrality"
+qualitative list (shared HTTP client factory, shared deserialization
+helper, etc.), which that play's own text says explicitly is a
+different list for a different purpose (sizing effort, not deciding
+what to invalidate). Using the broader list here would widen this
+mechanism's blast radius beyond what this section's own text licenses.
+
 ## Output
 
 This play doesn't introduce its own finding format or a new artifact —

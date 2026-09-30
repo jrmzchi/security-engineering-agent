@@ -29,6 +29,9 @@ Select relevant security domains (skills/security-review's "Where to
         |
 Select justified scanners (plays/scanner-selection.md)
         |
+Determine review budget (plays/review-budget.md) -- depth only, never
+    which domains
+        |
 Targeted security review (skills/security-review)
         |
 Candidate findings
@@ -50,6 +53,24 @@ Completion
 
 ```text
 NONE     -> stop here. No design, no review, no scanner, no summary.
+            One exception: when the scope shows both an ambient browser
+            credential and a state-changing endpoint (plays/security-
+            change-detection.md "Domains a signal pair requires"), use
+            the TARGETED manifest the NONE gate builds (below) and
+            review web-security only (read its play), at the MINIMAL budget. No design step.
+            Before stopping, run the NONE gate on the change's files
+            (from the kit's root: python -m tools.context_manifest.cli
+            none-gate --root <repository root> <file>...). Only exit 0
+            with STOP_NONE stops here; exit 1 with TARGETED_EXCEPTION
+            takes the exception, reviewed with the validated manifest
+            the gate prints (never a hand-written one); anything else
+            means the manual check.
+            The
+            exception runs the manifest's scanners for that domain
+            only (an unavailable one goes to coverageGaps), validates
+            and gates a finding, and reports one line when there is
+            none. Details: plays/security-change-detection.md's NONE
+            action.
 LOW      -> lightweight diff check only (plays/security-change-detection.md).
 MODERATE -> targeted review: load only the relevant play(s)/reference(s);
             also check skills/security-design's own activation list
@@ -119,11 +140,38 @@ built. A request classified MODERATE from intent can come out HIGH once
 the actual code is visible (or vice versa) — the workflow branches on
 the *later* classification for what review/gate steps are required.
 
+## Review budget: invoke the single entry point (plays/review-budget.md)
+
+Immediately after scanner selection and before targeted review starts,
+obtain `plays/review-budget.md`'s level (`MINIMAL`/`FOCUSED`/`ELEVATED`/
+`AUDIT`) by invoking that play's "The single entry point" —
+`tools/context_manifest/budget.py`'s `compute_review_budget()` — with
+review mode `TARGETED` and the sensitivity the (re-)classification just
+established. **`[V4 Batch 3]`** This step is a call site only: the
+starting points, the movement cap and the no-Python fallback are that
+play's, and this workflow does not restate them. What this workflow
+supplies is the inputs — the sensitivity, the Factors adjustment (its own
+weighing of that play's Factors), and a short `factorsEvidence` note on
+which Factor(s) drove any DOWNWARD movement (required by
+`tools/context_manifest/validator.py` whenever the level moves below its
+starting point; moving above it never needs justification). The result governs
+how much material
+`skills/security-review`'s targeted review step loads within the
+domains already selected above (see that skill's "Scope" step) — it
+never changes which domains are selected, and never lowers what
+`plays/finding-validation.md`'s independent-validation requirement (via
+`skills/security-validate`) or an explicitly requested `DEEP` review
+mode already demand (see `plays/review-budget.md`'s "The floor this
+play cannot lower").
+
 ## Targeted review
 
 "Targeted" means: review only the security domains the (re-)
 classification identified, using progressive disclosure — load the
 specific play(s)/reference(s) that apply, not the whole skill tree.
+Those domains are a minimum, not a boundary on findings: a concrete
+candidate of another domain shown by the code brings that one play in
+(`skills/security-review/SKILL.md` step 5).
 Domain-to-play routing is **not** a separate table maintained here or
 in `plays/scanner-selection.md` — it is `skills/security-review/SKILL.md`'s
 existing "Where to look next" table and `skills/security-review/references/quick-reference.md`,
@@ -162,7 +210,9 @@ Verification: Path traversal regression test passed.
 ```
 
 For a NONE-classified change, do not add a security summary at all
-unless it adds real information.
+unless it adds real information. The signal-pair exception and a NONE
+gate that did not run each report as `plays/security-change-detection.md`'s
+NONE action says.
 
 ## Ownership boundaries for this and future workflow-layer plays
 

@@ -11,55 +11,37 @@ on Windows or macOS, and does not depend on any Claude-specific feature
 (subagents, skills, plugins, hooks) for its core security behavior — those
 are optional accelerators layered on top.
 
-## Release status and roadmap
+## Release status
 
-- **V3 Final** is on `master` (`0ffd18e`). It is the complete V3 security
-  capability baseline.
+- **V4** is on `v4-release` (`6536968`) and, through this merge, on
+  `master`. It adds a Context Manifest with a built-in producer and
+  validator, optional and experimental TypeSafe Jev assistance that falls
+  back to the built-in producer, an experimental Evidence Reuse store, enterprise
+  identity (AD/SSO) review guidance, and a NONE gate that checks a
+  NONE-classified change for the CSRF signal pair before the workflow may
+  stop (see "V4 components" below).
+- **How V4 was validated** (`work/v4-release/hardening-release-ready.md`),
+  on a pre-registered protocol:
+  - the security regression set (39 V3 corpus cases and 13 enterprise
+    identity cases) passed 52 of 52, one run per case;
+  - four cases that had flipped or been missed in earlier rounds were each
+    run once more, and passed;
+  - three NONE-workflow cases run by a real agent passed.
+  These are single runs, not a stability measurement.
+- **What is not claimed:**
+  - no reduction in AI token use, cost or latency;
+  - no demonstrated benefit from Jev routing or evidence reuse;
+  - nothing in code forces an agent to call the NONE gate. The workflow
+    requires it, and the validation observed it.
+- **V3 Final** (`19af3ab`) remains the complete V3 capability baseline.
 - **V3 Slim Golden Baseline** is on `v3-slim`, tagged
-  `v3-slim-golden-baseline` (`f5502cd`). It preserves the validated V3
-  behavior and includes workflow fixes and regression checks. It has **not**
-  demonstrated an overall reduction in AI token use: the kit is 424 lines
-  larger than V3 Final, and the one verified local reduction is a
-  file-download review route that loads 509 rather than 519 lines.
-- **V4 is planned, not implemented.** Its design is still under review;
-  the features below are goals, not capabilities of the current release.
+  `v3-slim-golden-baseline` (`39a7b0b`). V4 is built on it.
+  - It preserves the validated V3 behaviour and adds workflow fixes and
+    regression checks.
+  - It did not demonstrate an overall reduction in AI token use.
+  - The V4 records cite its pre-rewrite local hash `f5502cd`; see
+    `work/v4-release/publish-commit-map.md`.
 
-## Planned V4: Adaptive Security Intelligence & Orchestration
-
-V4 aims to select the security work and context each task needs while
-preserving V3's security findings, independent validation, and gate
-behavior. It has two connected parts:
-
-1. **Adaptive Security Orchestration.** A typed Context Manifest will
-   describe the selected security domains, Skills, Plays, References,
-   scanners, priorities, and review budget. When available, TypeSafe Jev
-   may help make these routing decisions. Jev will not confirm a
-   vulnerability, decide exploitability or remediation correctness, or
-   issue a Security Gate result.
-2. **Adaptive Project Security Intelligence.** Evidence-backed security
-   facts and controls will record their scope, dependencies, confidence,
-   freshness, and invalidation conditions. Reviews may reuse still-valid
-   evidence and selectively revalidate what a change has affected.
-   Feedback from rejected candidates and human-discovered misses will
-   retain the supporting reasons and scope rather than become permanent
-   ignore rules.
-
-**A Jev token will be optional.** Without one, an included decision path
-must produce the same Context Manifest format and run the same security
-review, validation, and gate workflow. Missing or failed Jev calls must
-fall back safely; essential security checks cannot depend on Jev.
-
-A separate V4 capability is planned to review how an application uses
-enterprise AD/SSO: trust and validation of login results, authorization
-after login, safe directory connections and credentials, and failure
-behavior. This is application integration review, not an audit of an
-entire enterprise identity environment.
-
-V4 will be assessed against the validated V3 baseline using security
-regression cases and measured context, actual AI tokens, repeated
-reasoning, unnecessary scans, latency, and cost. Jev routing and evidence
-reuse will be measured separately. A later "V4 Slim" pass is only a
-possibility if those measurements reveal specific remaining waste.
 ## What this project does
 
 ```text
@@ -94,6 +76,122 @@ boundaries (`plays/cross-file-data-flow.md`,
 the highest-risk findings and fixes (`skills/adversarial-validation`).
 None of V3 is required for V1/V2 to keep working — see each skill's
 own "When to use" section for when it actually applies.
+
+**V4** makes the review's own routing executable and adds three
+capabilities, all layered on V1–V3 rather than replacing them (details
+in "V4 components" below):
+
+- a **Context Manifest**: the scope, sensitivity, security domains and
+  review budget of a review, produced by a deterministic, standard-library
+  Python package (`tools/context_manifest/`) and checked by a validator
+  that rejects an invalid manifest as a whole;
+- **optional** Jev (TypeSafe) assistance for that manifest, which is held
+  to the same deterministic floor and falls back to the built-in producer
+  on any problem;
+- an **experimental** Evidence Reuse store (`.security/feedback.json`,
+  `tools/feedback_store/`) that lets a still-eligible REJECTED conclusion be
+  reused only after every eligibility and freshness check passes;
+- **enterprise identity** review guidance (AD/LDAP, SSO/OIDC/JWT from Entra
+  ID or ADFS, Windows Integrated Authentication) in
+  `plays/enterprise-identity-security.md`.
+
+## V4 components
+
+**Built-in operation is the default and needs no credential.** Every
+review runs fully on the built-in path; nothing below requires Jev, a
+network connection, or a `TYPESAFE_API_KEY`.
+
+- **Context Manifest (stable default).** `skills/security-review` step 1
+  builds the manifest through `tools/context_manifest/orchestrator.py`
+  (`produce_manifest()`), which runs the built-in producer and
+  `validator.validate_manifest()`. A manifest that fails validation is
+  discarded whole, never patched. The review budget has one entry point
+  (`plays/review-budget.md`'s "The single entry point", executed by
+  `budget.compute_review_budget()`).
+- **Without Python.** When no working Python 3.7+ interpreter is
+  available, the review still runs: the agent computes scope, sensitivity,
+  domains and budget inline, as V3 did, and records that the manifest path
+  was unavailable (`skills/security-review` step 1). Only the kit's own
+  consistency check needs Python; it stops with `ERROR` (exit code 2)
+  rather than skipping its `SCOPE_COVERAGE` category. Evidence Reuse is
+  off without Python: no record is reused or written, so every candidate
+  gets full validation.
+- **Jev (optional, experimental).** With `TYPESAFE_API_KEY` set in the
+  environment, the orchestrator makes one HTTPS request to the TypeSafe
+  System One API, with no retry and a per-socket-operation timeout. Jev may add domains, raise
+  sensitivity, order domains and choose the review budget within its legal
+  range (below the caller's own Factors conclusion only when both its
+  budget answer and its named Factor have confidence of at least 0.5); it
+  never removes a floor domain, never lowers sensitivity, and never decides findings,
+  exploitability, chains, remediation or the gate. Its candidate is
+  validated against the same deterministic floor. A missing or rejected
+  key, a timeout, a transport or HTTP error, malformed or incomplete
+  output, or a candidate below the floor each falls back to the built-in
+  manifest, and the outcome is recorded in `degradation.jevOutcome`. The
+  outbound request carries a fixed field set and is refused if any field
+  looks like a secret; keeping those fields to short, value-free
+  descriptions is the reviewing agent's job (`skills/security-review`
+  step 1 lists what may go in each).
+- **Evidence Reuse (experimental).** A REJECTED conclusion recorded in the
+  target repository's `.security/feedback.json` is reused only when the
+  candidate has the same occurrence identity (sink, category and exact
+  ordered call path) and every eligibility check passes: pattern and scope
+  re-inspected in the current code, no invalidation condition true or
+  unknown, no dependency changed, every intermediate control re-confirmed,
+  and the record not stale. Anything ineligible, stale, malformed or
+  ambiguous means full validation. A record never changes which scanners
+  run or which candidates are generated. A missing or corrupted store
+  degrades reuse for that run only and is never overwritten automatically.
+  A record that a new validation contradicts is marked STALE even when
+  reuse is off for the run (`store.invalidate_contradicted()`); if that
+  cannot be persisted, the store is quarantined
+  (`.security/feedback.json.quarantine`) and nothing is reused until a
+  person runs `store.recover_quarantine()` as a separate maintenance step
+  (never during a review), which first verifies the record is STALE. A
+  store that cannot be parsed cannot name a contradicted record: the
+  review's notes state the confirmed finding, and whoever repairs the
+  store must re-validate it before any reuse.
+  Procedure: `plays/finding-validation.md`'s "Feedback Learning" sections;
+  format: `templates/feedback-store.md`.
+- **Enterprise identity.** Loaded only when the play's "When this play
+  applies" signals are present (for example `AddOpenIdConnect`,
+  `LdapConnection`, `AddNegotiate`); it stays within the `authentication`
+  domain. It has not been validated against a live AD, Entra ID, ADFS or
+  Kerberos environment.
+
+**What V4 does not claim.** V4 makes no token-saving, cost or speed claim,
+and no claim that Jev or Evidence Reuse improves review quality or
+efficiency; neither has a demonstrated benefit, which is why both are
+labelled optional/experimental. The design documents in
+`work/v4-planning/` describe hypotheses of that kind; they are design
+records, not release claims.
+
+## Validating this kit
+
+```text
+python -m unittest discover -s tools/context_manifest/tests -t .
+python -m unittest discover -s tools/feedback_store/tests -t .
+```
+
+Run both from the repository root; `-t .` is required. The tests use an
+injected fake Jev client and never contact the network or need a key.
+
+```powershell
+.\scripts\windows\consistency-check.ps1      # Windows PowerShell 5.1 or PowerShell 7
+```
+
+```bash
+./scripts/macos/consistency-check.sh
+```
+
+The consistency check reports `PASS`, `REVIEW_REQUIRED` (candidate places
+to look, see `plays/repository-consistency.md`) or `ERROR`. The review
+behaviour itself is validated by running a review over the fixtures:
+`tests/validation/README.md` (the V3 corpus, expected results in
+`tests/validation/expected-results.md`) and
+`tests/validation/v4-enterprise-identity-test-cases.md` (the enterprise
+identity set, expected results in
+`tests/validation/v4-enterprise-identity-expected-results.md`).
 
 ## Architecture
 
@@ -130,8 +228,9 @@ plays/           authoritative step-by-step security procedures
 references/      authoritative technology/platform security knowledge
 templates/       output formats (finding, security report, threat model,
                  security design, project security baseline, attack
-                 surface map, attack chain)
-tools/           notes + wrappers for Semgrep, Gitleaks, OSV-Scanner, Trivy
+                 surface map, attack chain, feedback store)
+tools/           notes for Semgrep, Gitleaks, OSV-Scanner, Trivy; the V4
+                 Python packages context_manifest/ and feedback_store/
 scripts/         windows/ (.ps1) and macos/ (.sh) install / scan / doctor
 integrations/    optional Codex- and Claude-specific accelerators
 output/          scan results and generated reports (gitignored)
@@ -301,3 +400,13 @@ clean scan.
 - AI-driven semantic review can still miss vulnerabilities or produce
   findings that need human judgment — treat `NEEDS_VERIFICATION` and LOW
   confidence findings as leads, not conclusions.
+- Jev assistance and Evidence Reuse are experimental (see "V4
+  components"). Known Evidence Reuse limitations: a `qualifiedSymbol` of
+  the form `(*T).Method` (Go pointer receiver) or `(anonymous
+  namespace)::f` (C++) is refused as unqualified, so such records cannot be
+  created (reuse simply does not happen); a path containing a Unicode
+  format character is refused, and a diff that touches such a file turns
+  Evidence Reuse off for that run; a writer holding the store's lock longer
+  than 30 seconds can be treated as crashed.
+- The enterprise identity guidance has not been exercised against a live
+  directory or identity provider.

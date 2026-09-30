@@ -55,3 +55,10 @@ skill's "Where to look next" table), which scanners
 `skills/security-design` runs before implementation. Do not produce a
 verbose standalone report for a NONE/LOW change — see
 `plays/security-change-detection.md`'s "No security theater" note.
+**`[V4 release hardening]`** A NONE result for the actual diff stops the
+workflow only after the NONE gate permits it
+(from the kit's root:
+`python -m tools.context_manifest.cli none-gate --root <repository root> <file>...`). What the
+gate's signal-pair exception runs and reports, and the manual check for
+when the gate cannot run: `plays/security-change-detection.md`'s NONE
+action.

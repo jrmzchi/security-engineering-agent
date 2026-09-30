@@ -1,6 +1,6 @@
 ---
 name: security-design
-description: Establish security requirements before or while implementing authentication, authorization, APIs, file upload/download, database operations, external HTTP requests, admin functionality, credential handling, cryptography, session/cookie handling, CORS, user-controlled redirects, background jobs, system commands, or filesystem access. Use before writing code for these, or when reviewing a design/architecture proposal.
+description: Establish security requirements before or while implementing authentication (including enterprise AD/SSO integration), authorization, APIs, file upload/download, database operations, external HTTP requests, admin functionality, credential handling, cryptography, session/cookie handling, CORS, user-controlled redirects, background jobs, system commands, or filesystem access. Use before writing code for these, or when reviewing a design/architecture proposal.
 ---
 
 # Security Design
@@ -14,6 +14,7 @@ Use this skill when designing or reviewing:
 
 ```text
 authentication
+enterprise identity integration (SSO/OIDC, AD/LDAP, Windows Integrated Authentication)
 authorization
 APIs
 file upload
@@ -49,7 +50,10 @@ What failure behavior is safe?
 ```
 
 The full procedure, worked examples per feature type, and the output
-format are in `plays/security-design.md`. A condensed per-feature-type
+format are in `plays/security-design.md`. For an enterprise identity
+integration, the requirements to establish are those of
+`plays/enterprise-identity-security.md` (its Scope and "What this play does
+not do" boundary) — this skill does not restate them. A condensed per-feature-type
 checklist is in `skills/security-design/references/design-checklist.md`
 for fast lookup once you already know the pattern.
 
