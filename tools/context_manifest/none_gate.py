@@ -69,7 +69,10 @@ def plain_utf8_problem(data: bytes):
     This is the whole reliability rule, on purpose. It does not try to recognise UTF-16/32, legacy encodings or
     binary files as "reliable": a decoder that accepts some bytes is not evidence that the file's real text was read.
     Every other file is reported unread, so the gate returns MANUAL_CHECK (or TARGETED_EXCEPTION if a signal is
-    found anyway)."""
+    found anyway).
+
+    Not covered, disclosed: a 7-bit encoding whose bytes are all ASCII (UTF-7, ISO-2022-*, HZ) is valid UTF-8, so it
+    counts as plain here, although its real text differs from its UTF-8 reading."""
     if b"\x00" in data:
         return "not plain UTF-8 text: it contains NUL bytes"
     try:

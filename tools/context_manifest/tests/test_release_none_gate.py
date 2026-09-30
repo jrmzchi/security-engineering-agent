@@ -464,7 +464,7 @@ class DocumentTests(unittest.TestCase):
                        "Otherwise you may stop at NONE only if you had reliable text for **every** file",
                        "does not count as checked just because you saw no signal in it",
                        "take the exception's web-security review anyway, conservatively, and list the file as not covered",
-                       "or a binary file. Do the manual check",
+                       "or a binary file. (A 7-bit encoding such as UTF-7 or ISO-2022 is valid UTF-8 and is not caught.) Do the manual check",
                        "say in one line that the NONE gate did not permit the stop, why, and what the manual check found",
                        "never a reason to skip the gate",
                        "nothing forces an agent to call it",

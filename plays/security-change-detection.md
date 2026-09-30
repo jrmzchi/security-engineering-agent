@@ -47,8 +47,10 @@ to `--root`, the repository under review.
 - Anything else (exit 2 `MANUAL_CHECK`, other output, or the command
   cannot run, for example no Python 3): do not stop silently. An
   `unread:` line saying a file "cannot be decoded reliably" is a file
-  that is not plain UTF-8 text: UTF-16/32, a legacy encoding, a file
-  that mixes encodings, or a binary file. Do the
+  that is not plain UTF-8 text: UTF-16/32, a legacy encoding whose
+  bytes are not valid UTF-8, a file that mixes encodings, or a binary
+  file. (A 7-bit encoding such as UTF-7 or ISO-2022 is valid UTF-8 and
+  is not caught.) Do the
   manual check: read those files for both halves of each pair in
   "Domains a signal pair requires". Both halves found: take the
   exception. Otherwise you may stop at NONE only if you had reliable
