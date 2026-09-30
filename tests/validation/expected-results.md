@@ -93,3 +93,19 @@ Must resolve to STILL_VULNERABLE on
 re-validation (not a CONFIRMED/not-
 CONFIRMED case):                        1  (remediation_fake_fix_after_still_vulnerable.py)
 ```
+
+## V4 Batch 4: enterprise identity fixtures (a separate Recall figure)
+
+`tests/fixtures/enterprise_identity/` is not part of this file's corpus. It
+belongs to the V4 Batch 4 capability (`plays/enterprise-identity-security.md`),
+its results are reported as their own Recall figure, and its expected outcomes
+live in `tests/validation/v4-enterprise-identity-expected-results.md`, kept
+out of this table on purpose. Consumers that read this table as the V3 corpus
+are therefore unaffected.
+
+## V4 release: caller-scope cases (a separate figure)
+
+`tests/fixtures/caller_scope/` is not part of this file's corpus either. Its
+cases exercise `plays/finding-validation.md`'s out-of-scope-caller rule, and
+their expected outcomes live in
+`tests/validation/v4-caller-scope-expected-results.md`.

@@ -1,6 +1,10 @@
 # Play: Authentication
 
-Authoritative procedure for authentication-related findings.
+Authoritative procedure for authentication-related findings. When the
+application consumes an enterprise identity provider or directory (OIDC/JWT
+from Entra ID or ADFS, direct LDAP/LDAPS, Windows Integrated Authentication),
+also apply `plays/enterprise-identity-security.md`. That play adds the
+integration-specific checks; the rules below still apply.
 
 ## Scope
 

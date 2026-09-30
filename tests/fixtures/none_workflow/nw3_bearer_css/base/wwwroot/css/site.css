@@ -1,0 +1,10 @@
+body {
+    font-family: system-ui, sans-serif;
+    color: #1a1a1a;
+    background: #ffffff;
+}
+
+.order-summary {
+    border: 1px solid #d0d0d0;
+    padding: 1rem;
+}

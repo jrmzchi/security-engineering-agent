@@ -77,16 +77,20 @@ to how security-sensitive it turns out to be:
 ```text
 1. classify security sensitivity   -> skills/security-change-detection
    (refined, not replaced, by a project baseline/attack-surface map
-   and review budget when they exist — plays/project-security-baseline.md,
-   plays/attack-surface-mapping.md, plays/review-budget.md)
+   when they exist — plays/project-security-baseline.md,
+   plays/attack-surface-mapping.md)
 2. security design if HIGH          -> skills/security-design
 3. implement
 4. inspect the actual diff (incl. untracked files)
    (expand scope beyond the diff for a changed shared component
    -> skills/security-impact-analysis)
 5. re-classify against what was actually built
+   (NONE stops only after the NONE gate permits it:
+   plays/security-change-detection.md's NONE action)
 6. proportional targeted review     -> skills/security-review (TARGETED mode)
-   (multi-file candidates: plays/cross-file-data-flow.md)
+   (multi-file candidates: plays/cross-file-data-flow.md; how much
+   material to load within that scope, computed from step 5's
+   classification by plays/review-budget.md's single entry point)
 7. validate important candidates    -> skills/security-validate
    (check chaining first: skills/attack-chain-analysis — a chain's own
    inter-step controls are themselves an adversarial-validation
@@ -98,7 +102,7 @@ to how security-sensitive it turns out to be:
 ```
 
 Full workflow, proportionality rules, and why NONE/LOW changes get none
-of this: `plays/secure-development-workflow.md`. Keep this list as the
+of this (with one signal-pair exception for NONE): `plays/secure-development-workflow.md`. Keep this list as the
 routing summary — do not copy the detailed rules from that play into
 this file.
 

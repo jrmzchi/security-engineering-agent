@@ -1,0 +1,456 @@
+{
+ "version": "v4-release-corpus/3",
+ "note": "V4 release validation corpus, revision 3 (strict safe-fixture standard, work/v4-release/safe-fixture-audit.md). 28 rows are the V3 corpus rows unchanged; 11 safe rows use V4-release fixtures. Not a V3-versus-V4 comparison set. Supersedes v4-release-corpus/2; /1 and /2 are kept as records.",
+ "supersedes": "v4-release-corpus/2",
+ "enterpriseIdentity": "tests/validation/v4-enterprise-identity-expected-results.md (13 rows, unchanged)",
+ "rows": [
+  {
+   "caseId": "RV-01",
+   "rowId": "sqli-unsafe",
+   "fixture": "sql_injection_unsafe.py",
+   "member": "",
+   "form": "single",
+   "expected": "CONFIRMED",
+   "expectedCategory": "SQL injection / CWE-89",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-02",
+   "rowId": "catalog-sqli-safe",
+   "fixture": "v4_release/catalog_lookup_parameterized_safe.py",
+   "member": "",
+   "form": "single",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/v4-release-corpus.md",
+   "replaces": {
+    "rowId": "sqli-safe",
+    "fixture": "sql_injection_safe.py",
+    "reason": "/users returns users' e-mail addresses to unauthenticated callers (CWE-306)"
+   }
+  },
+  {
+   "caseId": "RV-03",
+   "rowId": "cmdi-unsafe",
+   "fixture": "command_injection_unsafe.js",
+   "member": "",
+   "form": "single",
+   "expected": "CONFIRMED",
+   "expectedCategory": "OS command injection / CWE-78",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-04",
+   "rowId": "argv-bounded-safe",
+   "fixture": "v4_release/command_argument_array_bounded_safe.js",
+   "member": "",
+   "form": "single",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/v4-release-corpus.md",
+   "replaces": {
+    "rowId": "cmdi-safe",
+    "fixture": "command_injection_safe.js",
+    "reason": "V3: request value passed unvalidated to ImageMagick convert (CWE-88); revision 2 had no bound on the unauthenticated conversion work",
+    "previousV4Fixture": "v4_release/command_argument_array_allowlisted_safe.js"
+   }
+  },
+  {
+   "caseId": "RV-05",
+   "rowId": "ef-unsafe",
+   "fixture": "ef_fromsqlraw_vs_interpolated.cs",
+   "member": "FindByNameUnsafe",
+   "form": "multi-method",
+   "expected": "CONFIRMED",
+   "expectedCategory": "SQL injection / CWE-89",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-06",
+   "rowId": "ef-safe-interpolated",
+   "fixture": "ef_fromsqlraw_vs_interpolated.cs",
+   "member": "FindByNameSafe",
+   "form": "multi-method",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-07",
+   "rowId": "ef-safe-raw-params",
+   "fixture": "ef_fromsqlraw_vs_interpolated.cs",
+   "member": "FindByNameSafeRawWithParams",
+   "form": "multi-method",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-08",
+   "rowId": "remed-before",
+   "fixture": "remediation_fake_fix_before.py",
+   "member": "",
+   "form": "remediation-pair",
+   "expected": "CONFIRMED",
+   "expectedCategory": "SQL injection / CWE-89",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-09",
+   "rowId": "remed-after",
+   "fixture": "remediation_fake_fix_after_still_vulnerable.py",
+   "member": "",
+   "form": "remediation-pair",
+   "expected": "STILL_VULNERABLE",
+   "expectedCategory": "SQL injection / CWE-89, unresolved",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-10",
+   "rowId": "secret-unsafe",
+   "fixture": "hardcoded_secret_unsafe.py",
+   "member": "",
+   "form": "single",
+   "expected": "CONFIRMED",
+   "expectedCategory": "Hardcoded credential / CWE-798 (2 findings)",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-11",
+   "rowId": "secret-example",
+   "fixture": "hardcoded_secret_example_value.py",
+   "member": "",
+   "form": "single",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-12",
+   "rowId": "cookie-unsafe",
+   "fixture": "cookie_insecure_unsafe.js",
+   "member": "",
+   "form": "single",
+   "expected": "CONFIRMED",
+   "expectedCategory": "Insecure cookie / CWE-614, CWE-1004",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-13",
+   "rowId": "cookie-anonymous-cart-safe",
+   "fixture": "v4_release/cookie_flags_anonymous_session_safe.js",
+   "member": "",
+   "form": "single",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/v4-release-corpus.md",
+   "replaces": {
+    "rowId": "cookie-safe",
+    "fixture": "cookie_secure_safe.js",
+    "reason": "/login issues a 'logged in' session without checking any credential (CWE-287)"
+   }
+  },
+  {
+   "caseId": "RV-14",
+   "rowId": "cors-unsafe",
+   "fixture": "cors_wildcard_credentials_unsafe.js",
+   "member": "",
+   "form": "single",
+   "expected": "CONFIRMED",
+   "expectedCategory": "CORS misconfiguration / CWE-942",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-15",
+   "rowId": "cors-session-guarded-safe",
+   "fixture": "v4_release/cors_allowlist_session_guarded_safe.js",
+   "member": "",
+   "form": "single",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/v4-release-corpus.md",
+   "replaces": {
+    "rowId": "cors-safe",
+    "fixture": "cors_restricted_safe.js",
+    "reason": "V3: /api/account reads req.session.user with no session middleware or guard in the case (confirmed in the revision-3 run)"
+   }
+  },
+  {
+   "caseId": "RV-16",
+   "rowId": "xss-unsafe",
+   "fixture": "xss_unsafe.js",
+   "member": "",
+   "form": "single",
+   "expected": "CONFIRMED",
+   "expectedCategory": "XSS / CWE-79",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-17",
+   "rowId": "xss-safe",
+   "fixture": "xss_safe.js",
+   "member": "",
+   "form": "single",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-18",
+   "rowId": "csrf-deceptive",
+   "fixture": "csrf_samesite_lax_deceptive.cs",
+   "member": "",
+   "form": "single",
+   "expected": "CONFIRMED",
+   "expectedCategory": "CSRF / CWE-352",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-19",
+   "rowId": "redirect-unsafe",
+   "fixture": "redirect_unvalidated_unsafe.cs",
+   "member": "",
+   "form": "single",
+   "expected": "CONFIRMED",
+   "expectedCategory": "Open redirect / CWE-601",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-20",
+   "rowId": "redirect-preferences-safe",
+   "fixture": "v4_release/local_redirect_preferences_safe.cs",
+   "member": "",
+   "form": "single",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/v4-release-corpus.md",
+   "replaces": {
+    "rowId": "redirect-safe",
+    "fixture": "redirect_local_safe.cs",
+    "reason": "Login accepts credentials and verifies nothing once the placeholder comment is stripped"
+   }
+  },
+  {
+   "caseId": "RV-21",
+   "rowId": "ssrf-unsafe",
+   "fixture": "ssrf_user_url_unsafe.py",
+   "member": "",
+   "form": "single",
+   "expected": "CONFIRMED",
+   "expectedCategory": "SSRF / CWE-918",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-22",
+   "rowId": "ssrf-pinned-safe",
+   "fixture": "v4_release/ssrf_allowlist_pinned_safe.py",
+   "member": "",
+   "form": "single",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/v4-release-corpus.md",
+   "replaces": {
+    "rowId": "ssrf-safe",
+    "fixture": "ssrf_allowlist_safe.py",
+    "reason": "resolved IP not pinned for the connection (DNS-rebinding gap, admitted by the fixture) and unbounded response body"
+   }
+  },
+  {
+   "caseId": "RV-23",
+   "rowId": "traversal-unsafe",
+   "fixture": "path_traversal_unsafe.cs",
+   "member": "",
+   "form": "single",
+   "expected": "CONFIRMED",
+   "expectedCategory": "Path traversal / CWE-22",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-24",
+   "rowId": "traversal-public-manuals-nolinks-safe",
+   "fixture": "v4_release/public_document_download_nolinks_safe.cs",
+   "member": "",
+   "form": "single",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/v4-release-corpus.md",
+   "replaces": {
+    "rowId": "traversal-safe",
+    "fixture": "path_traversal_safe.cs",
+    "reason": "V3: uploads directory served unauthenticated (CWE-862); revision 2 assumed no links inside the base directory",
+    "previousV4Fixture": "v4_release/public_document_download_safe.cs"
+   }
+  },
+  {
+   "caseId": "RV-25",
+   "rowId": "prefix-deceptive",
+   "fixture": "path_prefix_before_canonicalization_deceptive.cs",
+   "member": "",
+   "form": "single",
+   "expected": "CONFIRMED",
+   "expectedCategory": "Path traversal / CWE-22",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-26",
+   "rowId": "prefix-canonical-nolinks-safe",
+   "fixture": "v4_release/path_prefix_canonicalized_nolinks_safe.cs",
+   "member": "",
+   "form": "single",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/v4-release-corpus.md",
+   "replaces": {
+    "rowId": "prefix-safe",
+    "fixture": "path_prefix_after_canonicalization_safe.cs",
+    "reason": "V3: links inside the base directory left out of scope (an environment assumption, not shown by the case)"
+   }
+  },
+  {
+   "caseId": "RV-27",
+   "rowId": "upload-unsafe",
+   "fixture": "file_upload_unsafe.py",
+   "member": "",
+   "form": "single",
+   "expected": "CONFIRMED",
+   "expectedCategory": "Unrestricted upload + path traversal via filename / CWE-434 + CWE-22",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-28",
+   "rowId": "upload-authenticated-safe",
+   "fixture": "v4_release/file_upload_authenticated_safe.py",
+   "member": "",
+   "form": "single",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/v4-release-corpus.md",
+   "replaces": {
+    "rowId": "upload-safe",
+    "fixture": "file_upload_safe.py",
+    "reason": "V3: anonymous uploads with no access control or quota in the case"
+   }
+  },
+  {
+   "caseId": "RV-29",
+   "rowId": "upload-webroot-deceptive",
+   "fixture": "upload_webroot_content_disposition_deceptive.cs",
+   "member": "",
+   "form": "single",
+   "expected": "CONFIRMED",
+   "expectedCategory": "Unrestricted upload -> stored XSS / CWE-434 + CWE-79",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-30",
+   "rowId": "idor-unsafe",
+   "fixture": "idor_unsafe.cs",
+   "member": "",
+   "form": "single",
+   "expected": "CONFIRMED",
+   "expectedCategory": "IDOR / BOLA / CWE-639",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-31",
+   "rowId": "idor-safe",
+   "fixture": "idor_safe.cs",
+   "member": "",
+   "form": "single",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-32",
+   "rowId": "authz-removed",
+   "fixture": "authorization_removed_unsafe.cs",
+   "member": "",
+   "form": "pair-diff",
+   "expected": "CONFIRMED",
+   "expectedCategory": "Broken access control / CWE-284, CWE-862",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-33",
+   "rowId": "authz-preserved",
+   "fixture": "authorization_preserved_safe.cs",
+   "member": "",
+   "form": "pair-diff",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-34",
+   "rowId": "xfile-sql-unsafe",
+   "fixture": "cross_file_sql_unsafe",
+   "member": "",
+   "form": "cross-file",
+   "expected": "CONFIRMED",
+   "expectedCategory": "SQL injection / CWE-89",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-35",
+   "rowId": "xfile-catalog-sql-safe",
+   "fixture": "v4_release/cross_file_catalog_search_safe",
+   "member": "",
+   "form": "cross-file",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/v4-release-corpus.md",
+   "replaces": {
+    "rowId": "xfile-sql-safe",
+    "fixture": "cross_file_sql_safe",
+    "reason": "unauthenticated user search returns users' e-mail addresses (CWE-306/CWE-359)"
+   }
+  },
+  {
+   "caseId": "RV-36",
+   "rowId": "xfile-traversal-unsafe",
+   "fixture": "cross_file_path_traversal_unsafe",
+   "member": "",
+   "form": "cross-file",
+   "expected": "CONFIRMED",
+   "expectedCategory": "Path traversal / CWE-22",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-37",
+   "rowId": "xfile-public-manuals-nolinks-safe",
+   "fixture": "v4_release/cross_file_public_manual_download_nolinks_safe",
+   "member": "",
+   "form": "cross-file",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/v4-release-corpus.md",
+   "replaces": {
+    "rowId": "xfile-traversal-safe",
+    "fixture": "cross_file_path_traversal_safe",
+    "reason": "V3: reports directory served unauthenticated; revision 2 assumed no links inside the base directory",
+    "previousV4Fixture": "v4_release/cross_file_public_manual_download_safe"
+   }
+  },
+  {
+   "caseId": "RV-38",
+   "rowId": "xfile-authz-unsafe",
+   "fixture": "cross_file_object_authz_unsafe",
+   "member": "",
+   "form": "cross-file",
+   "expected": "CONFIRMED",
+   "expectedCategory": "IDOR / BOLA / CWE-639",
+   "expectationSource": "tests/validation/expected-results.md"
+  },
+  {
+   "caseId": "RV-39",
+   "rowId": "xfile-authz-safe",
+   "fixture": "cross_file_object_authz_safe",
+   "member": "",
+   "form": "cross-file",
+   "expected": "NO_CONFIRMED",
+   "expectedCategory": "",
+   "expectationSource": "tests/validation/expected-results.md"
+  }
+ ]
+}

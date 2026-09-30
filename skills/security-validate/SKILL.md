@@ -19,7 +19,9 @@ severities.
 
 ```text
 Reconstruct the attack path
-Confirm attacker control of the input
+Confirm attacker control of the input   (callers outside the review
+                                        scope: plays/finding-validation.md's
+                                        out-of-scope-caller rule)
 Confirm code reachability
 Confirm sink behavior
 Inspect sanitization

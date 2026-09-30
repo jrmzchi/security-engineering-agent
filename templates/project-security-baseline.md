@@ -94,6 +94,28 @@ alone.
 Additional fact keys follow the same shape as needed:
 `authorization`, `database`, `orm`, `frontend`, `externalServices`,
 `fileStorage`, `secretSources`, `backgroundJobs`, `adminSurfaces`,
-`publicSurfaces`, `securityMiddleware`, `sensitiveData`. Add only the
-keys a given project's evidence actually supports — do not pad the
-schema with `UNKNOWN` placeholders for facts nobody asked about yet.
+`publicSurfaces`, `securityMiddleware`, `sensitiveData`,
+`cryptographicOperations`, `externallyInvokedTrustedInputOnly`. Add
+only the keys a given project's evidence actually supports — do not
+pad the schema with `UNKNOWN` placeholders for facts nobody asked
+about yet.
+
+**`cryptographicOperations`** and **`externallyInvokedTrustedInputOnly`**
+`[ADDED, V4 Batch 0]`: needed by
+`work/v4-planning/context-manifest-schema.md` section 3a's DEEP
+domain-applicability algorithm (`tools/context_manifest/domains.py`) —
+whether the project performs any cryptographic operation at all
+(informs `data-security`'s Scope items), and whether this component's
+invocation is positively confirmed to originate only from a trusted,
+already-authenticated, human-operated, or otherwise trusted-input-only
+source versus an unconfirmed or genuinely external one (informs
+`file-security`'s disclosed-limitation mitigation — see that
+algorithm's own `[OPEN, disclosed limitation]` note). Like every other
+key in this list, these two are coarse, project-wide facts recorded
+here for reuse across reviews — `tools/context_manifest/domains.py`'s
+own, more granular per-Scope-item facts (e.g. whether a specific
+component ships browser-side script, or issues user-influenced
+redirects) are a further reasoning step the reviewing agent performs
+when running that algorithm, informed by but not mechanically derived
+from this baseline record alone; do not expect a 1:1 field mapping
+between this file's fact keys and that module's fact vocabulary.
