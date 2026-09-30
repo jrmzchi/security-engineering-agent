@@ -58,6 +58,15 @@ NONE     -> stop here. No design, no review, no scanner, no summary.
             change-detection.md "Domains a signal pair requires"), build
             the manifest as TARGETED and review web-security only (read
             its play), at the MINIMAL budget. No design step.
+            Before stopping, run the NONE gate on the change's files
+            (python -m tools.context_manifest.cli none-gate <file>...).
+            Only exit 0 (STOP_NONE) stops here; exit 1 takes the
+            exception; anything else means the manual check. The
+            exception runs the manifest's scanners for that domain
+            only (an unavailable one goes to coverageGaps), validates
+            and gates a finding, and reports one line when there is
+            none. Details: plays/security-change-detection.md's NONE
+            action.
 LOW      -> lightweight diff check only (plays/security-change-detection.md).
 MODERATE -> targeted review: load only the relevant play(s)/reference(s);
             also check skills/security-design's own activation list
@@ -197,7 +206,9 @@ Verification: Path traversal regression test passed.
 ```
 
 For a NONE-classified change, do not add a security summary at all
-unless it adds real information.
+unless it adds real information. The signal-pair exception and a NONE
+gate that did not run each report as `plays/security-change-detection.md`'s
+NONE action says.
 
 ## Ownership boundaries for this and future workflow-layer plays
 

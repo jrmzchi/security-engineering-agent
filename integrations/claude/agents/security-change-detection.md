@@ -19,4 +19,6 @@ classification — it does not edit files, run scanners, or make any
 other change. Report the sensitivity level, which detection signals
 matched, and (per `plays/security-change-detection.md`'s "When a change
 doesn't clearly match any list above") default to the higher plausible
-level when genuinely unsure.
+level when genuinely unsure. This subagent cannot run the NONE gate
+(`plays/security-change-detection.md`'s NONE action); a NONE result is
+not a stop until the caller has run it.

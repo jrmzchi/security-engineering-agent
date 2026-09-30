@@ -37,7 +37,8 @@ route through this kit.** `AGENTS.md`'s "Before implementing a
 meaningful software change" section applies to Codex the same as any
 other agent — classify via `skills/security-change-detection`, and for
 anything beyond NONE/LOW sensitivity, follow
-`plays/secure-development-workflow.md` proportionally rather than
+`plays/secure-development-workflow.md` proportionally (a NONE result
+stops only after its NONE gate permits it, see that play's NONE row) rather than
 treating security as something only triggered by an explicit "review
 this" request.
 

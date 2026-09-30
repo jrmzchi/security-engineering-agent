@@ -24,6 +24,47 @@ required. Build the manifest as TARGETED and review that domain only
 (read its play), at the MINIMAL budget. The pair adds that one domain;
 it confirms nothing.
 
+**`[V4 release hardening]` Run the NONE gate before stopping.** A NONE
+classification of the actual diff does not stop the workflow by
+itself. First run, from the repository root, on the change's files (the
+files the diff touches as they are after it, untracked files included,
+deleted files left out; whole files, not the diff):
+
+```text
+python -m tools.context_manifest.cli none-gate <file>...
+```
+
+- Exit 0 with `STOP_NONE`: stop at NONE.
+- Exit 1 with `TARGETED_EXCEPTION <domain>`: take the exception above
+  for that domain. Build the manifest with the same files' texts as
+  `scope_texts`.
+- Anything else (exit 2 `MANUAL_CHECK`, other output, or the command
+  cannot run, for example no Python 3): do not stop silently. Do the
+  manual check: read those files for both halves of each pair in
+  "Domains a signal pair requires". Both halves found: take the
+  exception. Otherwise stop at NONE, and say in one line that the NONE
+  gate did not run, why, and what the manual check found.
+
+Noticing the pair yourself is an extra trigger for the exception, never
+a reason to skip the gate. At the pre-code classification there are no
+files yet: NONE there only skips the design step, and the gate runs when
+the actual diff is re-classified. The gate is code
+(`tools/context_manifest/none_gate.py`), but nothing forces an agent to
+call it: this step is where it is required.
+
+**What the exception runs and reports:**
+- the pair's domain only: its play and no other, no design step, the
+  MINIMAL budget;
+- the scanners the manifest selects for that domain (`scannersSelected`)
+  and no other; a selected scanner that is unavailable or fails is
+  recorded in `coverageGaps`;
+- a finding is validated (`plays/finding-validation.md`), goes through
+  `skills/security-gate`, and is reported like any other finding;
+- no finding: one line naming the check (the signal-pair exception and
+  its domain), the files it covered and the result, with any
+  `coverageGaps`. Say nothing about other domains: the change was not
+  reviewed for them.
+
 ### LOW
 
 ```text
@@ -190,3 +231,7 @@ For a NONE classification, do not produce a security summary, do not
 mention that "no issues were found" (nothing was checked), and do not
 pad the response with unnecessary security framing — see
 `plays/secure-development-workflow.md`'s completion-summary guidance.
+**Except the signal-pair exception, which reports what it checked**, as
+the NONE action says: a finding like any finding, or one line for no
+finding, limited to that domain. A NONE gate that did not run is also
+stated in one line. Neither is a security summary of the change.

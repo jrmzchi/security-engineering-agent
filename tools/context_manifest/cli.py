@@ -8,6 +8,7 @@ mechanism exists to prevent).
 
 Usage:
     python -m tools.context_manifest.cli scope-coverage-check
+    python -m tools.context_manifest.cli none-gate [--root DIR] FILE...
 
 Exit codes (matching scripts/*/consistency-check.*'s existing
 convention):
@@ -19,13 +20,23 @@ convention):
         plays/repository-consistency.md's SCOPE_COVERAGE entry).
     2   ERROR -- the check itself could not run (a play's Scope section
         could not be parsed at all, or an unexpected exception).
+
+`none-gate` ([V4 release hardening], see none_gate.py) is run before a
+change stops at NONE, on the change's files. Its exit codes follow the
+same shape:
+    0   STOP_NONE -- no signal pair; the NONE stop stands.
+    1   TARGETED_EXCEPTION -- a signal pair requires a domain; review it
+        (plays/secure-development-workflow.md's NONE row).
+    2   MANUAL_CHECK -- the gate could not decide (a file unreadable, no
+        files given, or the check failed); do the manual check instead.
+Only exit 0 permits the NONE stop. It prints no file contents.
 """
 
 from __future__ import annotations
 
 import sys
 
-from . import scope_coverage
+from . import none_gate, scope_coverage
 
 # [DISCLOSED, per independent review]: this module's own exit-code
 # contract (0/1/2) can collide with Python's default uncaught-exception
@@ -64,8 +75,29 @@ def _scope_coverage_check() -> int:
     return 1
 
 
+def _none_gate(args) -> int:
+    root = "."
+    if args[:1] == ["--root"]:
+        if len(args) < 2:
+            print("NONE_GATE")
+            print("MANUAL_CHECK")
+            print("reason: --root needs a directory")
+            return 2
+        root, args = args[1], args[2:]
+    decision = none_gate.decide(args, root=root)
+    print("NONE_GATE")
+    if decision.action == none_gate.TARGETED_EXCEPTION:
+        print(f"{decision.action} {' '.join(sorted(decision.domains))}")
+    else:
+        print(decision.action)
+    for reason in decision.reasons:
+        print(f"reason: {reason}")
+    return {none_gate.STOP_NONE: 0, none_gate.TARGETED_EXCEPTION: 1}.get(decision.action, 2)
+
+
 _COMMANDS = {
-    "scope-coverage-check": _scope_coverage_check,
+    "scope-coverage-check": lambda args: _scope_coverage_check(),
+    "none-gate": _none_gate,
 }
 
 
@@ -75,7 +107,7 @@ def main(argv=None) -> int:
         print(f"Usage: python -m tools.context_manifest.cli <{'|'.join(_COMMANDS)}>", file=sys.stderr)
         return 2
     try:
-        return _COMMANDS[argv[0]]()
+        return _COMMANDS[argv[0]](list(argv[1:]))
     except Exception as exc:  # pragma: no cover - defensive
         # Anything not already caught inside the command itself (e.g. a
         # bug in format_report, not just check_all) still maps to

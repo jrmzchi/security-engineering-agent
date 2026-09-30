@@ -85,6 +85,8 @@ to how security-sensitive it turns out to be:
    (expand scope beyond the diff for a changed shared component
    -> skills/security-impact-analysis)
 5. re-classify against what was actually built
+   (NONE stops only after the NONE gate permits it:
+   plays/security-change-detection.md's NONE action)
 6. proportional targeted review     -> skills/security-review (TARGETED mode)
    (multi-file candidates: plays/cross-file-data-flow.md; how much
    material to load within that scope, computed from step 5's

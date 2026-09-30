@@ -7,7 +7,8 @@ domain. Nothing here removes a domain, and a scope that matches no rule adds not
 "every review loads every play".
 
 It applies in every non-DEEP mode and at every sensitivity, NONE included (user decision, 2026-09-29): when both
-signals are present, web-security is a required domain even for a TARGETED change classified NONE.
+signals are present, web-security is a required domain even for a TARGETED change classified NONE. The workflow
+reaches it at NONE through none_gate.py, which runs this check before any NONE stop. [V4 release hardening]
 
 The one rule today mirrors DEEP's own applicability rule for CSRF (domains.py, `_web_ruled_out`: web-security stays
 applicable unless `never_uses_cookie_or_ambient_auth_for_state_change` is positively confirmed):
