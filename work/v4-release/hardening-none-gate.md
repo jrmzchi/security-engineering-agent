@@ -23,7 +23,11 @@ what is not".
        floor raised.
    - **Unread files are reported separately:** as `unread:` lines, so the exception's report lists them as not
      covered.
-   - **Other encodings.** A file with NUL bytes (UTF-16/UTF-32) is also read with the NULs removed.
+   - **Other encodings** (Unicode round, below). A file with NUL bytes is also read as UTF-16 LE/BE and UTF-32 LE/BE
+     at every alignment, whatever its BOM says, plus each reading with non-ASCII characters replaced by spaces.
+     A file with a UTF-16/32 BOM its encoding cannot decode, a NUL-bearing file no UTF-16/32 decoding accepts
+     (a binary file, for example), or a NUL-bearing file over 1 MiB, is reported as `unread` ("cannot be decoded
+     reliably"): MANUAL_CHECK, never STOP_NONE.
    - **Exit 0 is only ever STOP_NONE.** A crash inside the command is exit 2. An interpreter that cannot import the
      package exits 1, and the documents accept exit 1 only *with* the `TARGETED_EXCEPTION` line. So every failure
      lands on "do not stop at NONE".
@@ -121,13 +125,32 @@ All of these were fixed in `634f77e`. The open question was settled as "run from
 - `unread` is carried on every branch.
 - The documents are consistent.
 
-**Recorded, not fixed.** The bounded cycle allows one fix round:
-- **Minor:** in a UTF-16/32 file, a non-ASCII character whose code unit contains the byte `0x22` or `0x27` becomes a
-  quote once the NULs are removed. Inside a route string, that breaks the route-verb patterns, so the gate returns
-  STOP_NONE. Examples: 丢 (U+4E22) and − (U+2212). This is not a regression: such files were STOP_NONE before too.
-  The suggested fix is also decoding NUL-bearing files as utf-16-le/be and utf-32-le/be (a union), plus a test.
+**Recorded after that round:**
+- **Minor:** in a UTF-16/32 file, a non-ASCII character whose code unit contains the byte `0x22` or `0x27` became a
+  quote once the NULs were removed, so the gate returned STOP_NONE. Examples: 丢 (U+4E22) and − (U+2212).
+  This was closed by the Unicode round below.
 - **Nit:** `tools/README.md` says `none-gate` "is run by the reviewing agent before a NONE stop"; it should say it
-  is required.
+  is required. Still open.
+
+**Unicode round** (user-authorized, 2026-09-30; one fix round, then one fix-only re-review):
+- `67d6d29`: decoding by BOM and byte order.
+- Its independent review found:
+  - **Major:** a regression. A BOM that disagrees with the content, or a BOM file holding segments in another byte
+    order or width, gave STOP_NONE, because the BOM narrowed the readings.
+  - **Minor:** in mixed-encoding files, a wrong-alignment neighbour glued itself to a `\b` signal.
+  - **Minor:** no test covered the UTF-32 alignments or the BOM mismatch.
+  - **Minor:** this record was stale.
+- The single fix round:
+  - every NUL-bearing file gets all readings, whatever its BOM;
+  - every reading also gets an ASCII projection;
+  - a 1 MiB cap on NUL-bearing files, above which the result is MANUAL_CHECK.
+- Measured on the fixed code:
+  - 40 regression tests (every construction the review found, all UTF-32 alignments, the cap);
+  - 22 mutants killed;
+  - a mixed-encoding sweep of 37,982 files that hold the pair (random byte order, width, BOM and junk bytes between
+    newline-bounded segments): **0 wrong STOP_NONE**. The same sweep finds 7,426 on `67d6d29`, so it can detect the
+    fault.
+- The fix-only re-review result is recorded below.
 
 ## Release validation this version still needs
 

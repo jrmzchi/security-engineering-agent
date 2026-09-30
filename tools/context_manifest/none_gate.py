@@ -35,6 +35,7 @@ Nothing here prints or stores file contents. Reasons name files by the path the 
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Iterable as _Iterable
 from dataclasses import dataclass, field
 from typing import Dict, FrozenSet, Iterable, Mapping, Tuple
@@ -67,48 +68,66 @@ _BOMS = (
 _WIDE = ("utf-16-le", "utf-16-be", "utf-32-le", "utf-32-be")
 
 
+_NON_ASCII = re.compile(r"[^\x00-\x7f]")
+_WIDE_LIMIT = 1024 * 1024   # bytes; a larger file with NUL bytes is not decoded as UTF-16/32 (MANUAL_CHECK)
+
+
 def _readings(data: bytes):
-    """All readings of one file's bytes, and whether one of them is a reliable decoding. [V4 release hardening]
+    """All readings of one file's bytes, and why it cannot be relied on (None if it can). [V4 release hardening]
 
     Every signal is ASCII. The UTF-8 reading (bad bytes replaced) keeps ASCII intact for UTF-8 and for every
-    ASCII-compatible legacy encoding (Big5, Shift-JIS, GBK, Latin-1, ...), so it is always included. It does not for
-    UTF-16/UTF-32, where every ASCII character carries a 0x00 byte -- so a file that can hold ASCII signals in those
-    encodings always has a NUL byte or a UTF-16/32 BOM. For such a file:
-    - with a BOM, the byte order it names is decoded after the BOM;
-    - without one, both byte orders of UTF-16 and UTF-32 are decoded, at every code-unit alignment.
-    Those readings replace bad code units, so one malformed unit cannot hide a signal elsewhere, and all of them are
-    checked together (the floor only adds domains). Such a file counts as reliably read only if a BOM-named encoding,
-    or one of the four without a BOM, decodes it strictly. If none does, the caller must not stop at NONE on it
-    (MANUAL_CHECK).
+    ASCII-compatible legacy encoding (Big5, Shift-JIS, GBK, Latin-1, ...). It does not for UTF-16/UTF-32, where every
+    ASCII character carries a 0x00 byte. So for a file that holds a NUL byte, whatever its BOM says:
+    - UTF-16 LE/BE at both code-unit alignments and UTF-32 LE/BE at all four are decoded (bad units replaced), so each
+      segment of a file whose byte order, width or alignment changes part-way -- or disagrees with its BOM -- is read
+      correctly by one of them;
+    - a UTF-16/32 BOM's own encoding(s) are decoded after it, NUL or not.
+    Every reading is also added with each non-ASCII character replaced by a space. A wrong-alignment or wrong-encoding
+    neighbour then cannot glue itself to an ASCII signal and break a `\b` boundary, and non-ASCII route text cannot
+    cut a pattern. All readings are checked together; the floor only adds domains, so extra readings can only add.
 
-    Not covered: text in an encoding that is neither ASCII-compatible nor UTF-16/32 (EBCDIC, UTF-7), and a signal
-    whose own characters are malformed."""
+    The file cannot be relied on (the caller must not stop at NONE on it, MANUAL_CHECK) when:
+    - it has a UTF-16/32 BOM that its named encoding(s) cannot decode strictly;
+    - it has NUL bytes and no BOM, and none of UTF-16 LE/BE, UTF-32 LE/BE decodes it strictly (a binary file, say);
+    - it has NUL bytes and is larger than _WIDE_LIMIT: decoding it that many ways would cost too much.
+
+    Not covered: an encoding that is neither ASCII-compatible nor UTF-16/32 (EBCDIC, UTF-7); a signal whose own
+    characters are malformed, or whose characters are split across two encodings."""
     texts = [data.decode("utf-8", errors="replace")]
-    for bom, encodings in _BOMS:
-        if data.startswith(bom):
-            body = data[len(bom):]
-            reliable = False
-            for enc in encodings:
-                texts.append(body.decode(enc, errors="replace"))
+    why = None
+    has_nul = b"\x00" in data
+    if has_nul and len(data) > _WIDE_LIMIT:
+        why = f"NUL bytes in a file over {_WIDE_LIMIT // (1024 * 1024)} MiB, not decoded as UTF-16/32"
+    else:
+        for bom, encodings in _BOMS:
+            if data.startswith(bom):
+                body = data[len(bom):]
+                strict = False
+                for enc in encodings:
+                    texts.append(body.decode(enc, errors="replace"))
+                    try:
+                        body.decode(enc)
+                        strict = True
+                    except UnicodeDecodeError:
+                        pass
+                if not strict:
+                    why = "UTF-16/32 BOM, but its encoding does not decode the file"
+                break
+        if has_nul:
+            strict = False
+            for enc in _WIDE:
+                width = 2 if enc.startswith("utf-16") else 4
+                for offset in range(width):
+                    texts.append(data[offset:].decode(enc, errors="replace"))
                 try:
-                    body.decode(enc)
-                    reliable = True
+                    data.decode(enc)
+                    strict = True
                 except UnicodeDecodeError:
                     pass
-            return texts, reliable
-    if b"\x00" not in data:
-        return texts, True
-    reliable = False
-    for enc in _WIDE:
-        width = 2 if enc.startswith("utf-16") else 4
-        for offset in range(width):
-            texts.append(data[offset:].decode(enc, errors="replace"))
-        try:
-            data.decode(enc)
-            reliable = True
-        except UnicodeDecodeError:
-            pass
-    return texts, reliable
+            if not strict and why is None and not any(data.startswith(b) for b, _ in _BOMS):
+                why = "NUL bytes, but no UTF-16/32 decoding accepts the file"
+    texts += [y for y in (_NON_ASCII.sub(" ", x) for x in texts) if y not in texts]
+    return texts, why
 
 
 def read_scope_texts(paths: Iterable[str], root: str = ".") -> Tuple[Dict[str, str], Tuple[str, ...]]:
@@ -131,10 +150,10 @@ def read_scope_texts(paths: Iterable[str], root: str = ".") -> Tuple[Dict[str, s
         except OSError as exc:
             problems.append(f"{p}: unreadable ({type(exc).__name__})")
             continue
-        readings, reliable = _readings(data)
+        readings, why = _readings(data)
         texts[p] = "\n".join(readings)
-        if not reliable:
-            problems.append(f"{p}: cannot be decoded reliably (UTF-16/32 BOM or NUL bytes, but no candidate decodes)")
+        if why is not None:
+            problems.append(f"{p}: cannot be decoded reliably ({why})")
     return texts, tuple(problems)
 
 

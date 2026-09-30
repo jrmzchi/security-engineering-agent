@@ -200,6 +200,54 @@ class UnicodeTests(unittest.TestCase):
         d = self.action(b"\x01" + (AMBIENT + self.STATE_CJK).encode("utf-16-le"))
         self.assertEqual(d.action, none_gate.TARGETED_EXCEPTION)
 
+    def test_a_bom_that_disagrees_with_the_content_does_not_hide_the_pair(self):
+        # review Major on 67d6d29: the BOM used to narrow the readings to its own encoding
+        src = AMBIENT + STATE
+        a, s = AMBIENT, STATE
+        cases = {
+            "LE BOM, UTF-16 BE": b"\xff\xfe" + src.encode("utf-16-be"),
+            "BE BOM, UTF-16 LE": b"\xfe\xff" + src.encode("utf-16-le"),
+            "UTF-16 LE BOM, UTF-32 LE": b"\xff\xfe" + src.encode("utf-32-le"),
+            "UTF-16 BE BOM, UTF-32 BE": b"\xfe\xff" + src.encode("utf-32-be"),
+            "UTF-32 LE BOM, UTF-16 BE": b"\xff\xfe\x00\x00" + src.encode("utf-16-be"),
+            "LE BOM, LE then BE segment": b"\xff\xfe" + a.encode("utf-16-le") + s.encode("utf-16-be"),
+            "LE BOM, odd ASCII bytes between segments": b"\xff\xfe" + a.encode("utf-16-le") + b"x" + s.encode("utf-16-le") + b"y",
+            "BOM in the middle": b"\xff\xfe" + a.encode("utf-16-le") + b"\xfe\xff" + s.encode("utf-16-be"),
+        }
+        for name, data in cases.items():
+            with self.subTest(case=name):
+                self.assertEqual(self.action(data).action, none_gate.TARGETED_EXCEPTION)
+
+    def test_mixed_encoding_segments_do_not_hide_the_pair(self):
+        # review Minor on 67d6d29: a wrong-alignment neighbour glued itself to a `\b` signal
+        cases = {
+            "odd UTF-8 prefix, Flask": b"app = Flask(\n" + "from flask import Flask, session\n@app.post('/x')\n".encode("utf-16-le") + b"\n",
+            "odd UTF-8 prefix, non-ASCII route": (b" const s = require('express-session'); f(\n"
+                                                  + "app.get('/丢/delete', h)\n".encode("utf-16-le") + b"\n"),
+            "odd UTF-8 prefix, ASCII route": (b" const s = require('express-session'); f(\n"
+                                              + "app.get('/x/delete', h)\n".encode("utf-16-le") + b"\n"),
+            "even UTF-8 prefix": b"app = Flask(\n\n" + "from flask import Flask, session\n@app.post('/x')\n".encode("utf-16-le"),
+        }
+        for name, data in cases.items():
+            with self.subTest(case=name):
+                self.assertEqual(self.action(data).action, none_gate.TARGETED_EXCEPTION)
+
+    def test_every_utf32_alignment_fires(self):
+        src = AMBIENT + self.STATE_CJK
+        for enc in ("utf-32-le", "utf-32-be"):
+            for prefix in (b"x", b"\r\n", b"xyz"):
+                with self.subTest(encoding=enc, prefix=len(prefix)):
+                    self.assertNotEqual(self.action(prefix + src.encode(enc)).action, none_gate.STOP_NONE)
+                    self.assertEqual(self.action(prefix + src.encode(enc)).action, none_gate.TARGETED_EXCEPTION)
+
+    def test_a_large_file_with_nul_bytes_is_a_manual_check(self):
+        big = b"\x00" * (none_gate._WIDE_LIMIT + 4)   # a multiple of 4: every UTF-16/32 decoding accepts it
+        d = self.action(big)
+        self.assertEqual(d.action, none_gate.MANUAL_CHECK)
+        self.assertIn("cannot be decoded reliably", " ".join(d.unread))
+        d = self.action(AMBIENT.encode() + STATE.encode() + big)
+        self.assertEqual(d.action, none_gate.TARGETED_EXCEPTION)
+
     def test_input_that_cannot_be_decoded_reliably_is_a_manual_check(self):
         cases = {
             "no BOM, NULs, no candidate decodes": self.UNDECODABLE,
