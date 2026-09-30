@@ -55,9 +55,9 @@ Completion
 NONE     -> stop here. No design, no review, no scanner, no summary.
             One exception: when the scope shows both an ambient browser
             credential and a state-changing endpoint (plays/security-
-            change-detection.md "Domains a signal pair requires"), build
-            the manifest as TARGETED and review web-security only (read
-            its play), at the MINIMAL budget. No design step.
+            change-detection.md "Domains a signal pair requires"), use
+            the TARGETED manifest the NONE gate builds (below) and
+            review web-security only (read its play), at the MINIMAL budget. No design step.
             Before stopping, run the NONE gate on the change's files
             (from the kit's root: python -m tools.context_manifest.cli
             none-gate --root <repository root> <file>...). Only exit 0

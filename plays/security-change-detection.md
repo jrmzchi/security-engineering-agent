@@ -20,8 +20,8 @@ Action: **no security workflow.** Do not run a scanner, do not load a
 play, do not produce a security summary for this change. **One
 exception:** when the scope shows both halves of a signal pair in
 "Domains a signal pair requires" below, the pair's domain is still
-required. Build the manifest as TARGETED and review that domain only
-(read its play), at the MINIMAL budget. The pair adds that one domain;
+required. The NONE gate below builds its TARGETED manifest; review that
+domain only (read its play), at the MINIMAL budget. The pair adds that one domain;
 it confirms nothing.
 
 **`[V4 release hardening]` Run the NONE gate before stopping.** A NONE
@@ -52,7 +52,9 @@ to `--root`, the repository under review.
   exception's manifest could not be built or validated (exit 2
   `MANUAL_CHECK` with that reason): do not stop at NONE, and do not write
   a manifest yourself. Review that domain by hand at the MINIMAL budget,
-  and report that no validated manifest exists as a coverage gap.
+  and report that no validated manifest exists as a coverage gap. With no
+  manifest there is no scanner selection: run no scanner, and record the
+  missing manifest in `coverageGaps`.
 - Anything else (exit 2 `MANUAL_CHECK`, other output, or the command
   cannot run, for example no Python 3): do not stop silently. An
   `unread:` line saying a file "cannot be decoded reliably" is a file
@@ -62,7 +64,9 @@ to `--root`, the repository under review.
   is not caught.) Do the
   manual check: read those files for both halves of each pair in
   "Domains a signal pair requires". Both halves found: take the
-  exception. Otherwise you may stop at NONE only if you had reliable
+  exception without a manifest, as for a manifest that could not be built
+  (the gate did not build one): read that domain's play only, run no
+  scanner, and record "no validated manifest" in `coverageGaps`. Otherwise you may stop at NONE only if you had reliable
   text for **every** file: a file the gate could not read reliably, or
   that you could not read as text yourself, does not count as checked
   just because you saw no signal in it. For such a file, either get its
