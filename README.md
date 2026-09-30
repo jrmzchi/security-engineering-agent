@@ -15,8 +15,8 @@ are optional accelerators layered on top.
 
 - **V4** is on `v4-release` (`6536968`) and, through this merge, on
   `master`. It adds a Context Manifest with a built-in producer and
-  validator, optional TypeSafe Jev assistance that falls back to the
-  built-in producer, an experimental Evidence Reuse store, enterprise
+  validator, optional and experimental TypeSafe Jev assistance that falls
+  back to the built-in producer, an experimental Evidence Reuse store, enterprise
   identity (AD/SSO) review guidance, and a NONE gate that checks a
   NONE-classified change for the CSRF signal pair before the workflow may
   stop (see "V4 components" below).
@@ -24,7 +24,8 @@ are optional accelerators layered on top.
   on a pre-registered protocol:
   - the security regression set (39 V3 corpus cases and 13 enterprise
     identity cases) passed 52 of 52, one run per case;
-  - four earlier-unstable cases were each run once more, and passed;
+  - four cases that had flipped or been missed in earlier rounds were each
+    run once more, and passed;
   - three NONE-workflow cases run by a real agent passed.
   These are single runs, not a stability measurement.
 - **What is not claimed:**
