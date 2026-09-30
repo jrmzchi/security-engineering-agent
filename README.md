@@ -11,55 +11,36 @@ on Windows or macOS, and does not depend on any Claude-specific feature
 (subagents, skills, plugins, hooks) for its core security behavior — those
 are optional accelerators layered on top.
 
-## Release status and roadmap
+## Release status
 
-- **V3 Final** is on `master` (`0ffd18e`). It is the complete V3 security
-  capability baseline.
+- **V4** is on `v4-release` (`6536968`) and, through this merge, on
+  `master`. It adds a Context Manifest with a built-in producer and
+  validator, optional TypeSafe Jev assistance that falls back to the
+  built-in producer, an experimental Evidence Reuse store, enterprise
+  identity (AD/SSO) review guidance, and a NONE gate that checks a
+  NONE-classified change for the CSRF signal pair before the workflow may
+  stop (see "V4 components" below).
+- **How V4 was validated** (`work/v4-release/hardening-release-ready.md`),
+  on a pre-registered protocol:
+  - the security regression set (39 V3 corpus cases and 13 enterprise
+    identity cases) passed 52 of 52, one run per case;
+  - four earlier-unstable cases were each run once more, and passed;
+  - three NONE-workflow cases run by a real agent passed.
+  These are single runs, not a stability measurement.
+- **What is not claimed:**
+  - no reduction in AI token use, cost or latency;
+  - no demonstrated benefit from Jev routing or evidence reuse;
+  - nothing in code forces an agent to call the NONE gate. The workflow
+    requires it, and the validation observed it.
+- **V3 Final** (`19af3ab`) remains the complete V3 capability baseline.
 - **V3 Slim Golden Baseline** is on `v3-slim`, tagged
-  `v3-slim-golden-baseline` (`f5502cd`). It preserves the validated V3
-  behavior and includes workflow fixes and regression checks. It has **not**
-  demonstrated an overall reduction in AI token use: the kit is 424 lines
-  larger than V3 Final, and the one verified local reduction is a
-  file-download review route that loads 509 rather than 519 lines.
-- **V4 is planned, not implemented.** Its design is still under review;
-  the features below are goals, not capabilities of the current release.
+  `v3-slim-golden-baseline` (`39a7b0b`). V4 is built on it.
+  - It preserves the validated V3 behaviour and adds workflow fixes and
+    regression checks.
+  - It did not demonstrate an overall reduction in AI token use.
+  - The V4 records cite its pre-rewrite local hash `f5502cd`; see
+    `work/v4-release/publish-commit-map.md`.
 
-## Planned V4: Adaptive Security Intelligence & Orchestration
-
-V4 aims to select the security work and context each task needs while
-preserving V3's security findings, independent validation, and gate
-behavior. It has two connected parts:
-
-1. **Adaptive Security Orchestration.** A typed Context Manifest will
-   describe the selected security domains, Skills, Plays, References,
-   scanners, priorities, and review budget. When available, TypeSafe Jev
-   may help make these routing decisions. Jev will not confirm a
-   vulnerability, decide exploitability or remediation correctness, or
-   issue a Security Gate result.
-2. **Adaptive Project Security Intelligence.** Evidence-backed security
-   facts and controls will record their scope, dependencies, confidence,
-   freshness, and invalidation conditions. Reviews may reuse still-valid
-   evidence and selectively revalidate what a change has affected.
-   Feedback from rejected candidates and human-discovered misses will
-   retain the supporting reasons and scope rather than become permanent
-   ignore rules.
-
-**A Jev token will be optional.** Without one, an included decision path
-must produce the same Context Manifest format and run the same security
-review, validation, and gate workflow. Missing or failed Jev calls must
-fall back safely; essential security checks cannot depend on Jev.
-
-A separate V4 capability is planned to review how an application uses
-enterprise AD/SSO: trust and validation of login results, authorization
-after login, safe directory connections and credentials, and failure
-behavior. This is application integration review, not an audit of an
-entire enterprise identity environment.
-
-V4 will be assessed against the validated V3 baseline using security
-regression cases and measured context, actual AI tokens, repeated
-reasoning, unnecessary scans, latency, and cost. Jev routing and evidence
-reuse will be measured separately. A later "V4 Slim" pass is only a
-possibility if those measurements reveal specific remaining waste.
 ## What this project does
 
 ```text
