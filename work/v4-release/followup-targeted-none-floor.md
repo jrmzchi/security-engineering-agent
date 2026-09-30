@@ -1,8 +1,8 @@
-# Follow-up (not implemented): the CSRF signal floor on the TARGETED/NONE path (2026-09-30)
+# Follow-up: the CSRF signal floor on the TARGETED/NONE path (2026-09-30)
 
-**Status: recorded only.** It covers two Minors from the revision-9 fix-only re-review (report §18). No product file,
-guidance, test or protocol was changed for them. The validated product (kit export `812115b5…`) stays as it is. Any
-fix needs its own authorization, review and validation.
+**Status: implemented on the local branch `v4-release-hardening`, not published** — see `hardening-none-gate.md`.
+The text below is the record as written before that work, unchanged. It covers two Minors from the revision-9 fix-only
+re-review (report §18). The published product (kit export `812115b5…`) does not contain the fix.
 
 **Scope:** only the TARGETED-mode path where item 0 classifies a change NONE. QUICK/STANDARD/DEEP are unaffected, and
 so is a TARGETED change classified LOW or above. The validation corpus exercises neither item.
