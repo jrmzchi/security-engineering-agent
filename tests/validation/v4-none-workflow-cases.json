@@ -1,0 +1,30 @@
+{
+  "version": "v4-none-workflow/1",
+  "note": "Pre-registered TARGETED/NONE workflow cases (V4 release hardening). Each case is a git repository built from the fixture's base/ tree, committed, then given one uncommitted change. The runner applies the kit's workflow to that change. Grading rules: work/v4-release/hardening-validation-protocol.md (revision 10), step B.",
+  "cases": [
+    {
+      "caseId": "NW-1",
+      "fixture": "none_workflow/nw1_csrf_unsafe",
+      "change": {"file": "Program.cs", "old": "// Permanetly deletes", "new": "// Permanently deletes"},
+      "expected": {"sensitivity": "NONE", "gate": "TARGETED_EXCEPTION", "gateFile": "Program.cs", "domains": ["web-security"],
+                   "reviewBudget": "MINIMAL", "scannersSelected": ["semgrep"], "coverageGapsInclude": ["semgrep"],
+                   "finding": {"status": "CONFIRMED", "keywords": ["csrf", "cross-site request forgery"], "file": "Program.cs"},
+                   "routedThrough": ["plays/finding-validation.md", "security-gate"], "securityGate": ["PASS", "BLOCK"]}
+    },
+    {
+      "caseId": "NW-2",
+      "fixture": "none_workflow/nw2_csrf_safe",
+      "change": {"file": "Program.cs", "old": "// Permanetly deletes", "new": "// Permanently deletes"},
+      "expected": {"sensitivity": "NONE", "gate": "TARGETED_EXCEPTION", "gateFile": "Program.cs", "domains": ["web-security"],
+                   "reviewBudget": "MINIMAL", "scannersSelected": ["semgrep"], "coverageGapsInclude": ["semgrep"],
+                   "finding": null, "reportNames": ["web-security", "web security", "csrf"], "securityGate": [null, "PASS"]}
+    },
+    {
+      "caseId": "NW-3",
+      "fixture": "none_workflow/nw3_bearer_css",
+      "change": {"file": "wwwroot/css/site.css", "old": "color: #1a1a1a;", "new": "color: #333333;"},
+      "expected": {"sensitivity": "NONE", "gate": "STOP_NONE", "gateFile": "site.css", "manifest": null, "finding": null,
+                   "securityGate": [null]}
+    }
+  ]
+}
