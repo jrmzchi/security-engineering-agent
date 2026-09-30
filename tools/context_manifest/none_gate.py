@@ -17,7 +17,8 @@ It can fire for a comment-only change to a file that already holds the pair; the
 
 What this guarantees:
 - `decide()` calls `signal_floor.required_domains()` on the texts it read before it can return STOP_NONE.
-- No failure returns STOP_NONE. An unreadable or missing file, an empty file list, a bad argument, or an exception from
+- No failure returns STOP_NONE. An unreadable or missing file, a file that looks like UTF-16/32 but cannot be decoded
+  reliably, an empty file list, a bad argument, or an exception from
   the floor returns MANUAL_CHECK with the reason. When the files that could be read already require a domain, the
   result is TARGETED_EXCEPTION even if others could not be read: the unread files cannot remove a domain. The
   unread files are returned separately (`unread`, and `unread:` lines from the CLI) so the report can say so.
@@ -55,13 +56,65 @@ class NoneGateDecision:
     #                                                          produce_manifest(scope_texts=...) on the exception path
 
 
-def read_scope_texts(paths: Iterable[str], root: str = ".") -> Tuple[Dict[str, str], Tuple[str, ...]]:
-    """Read each file's whole text. Returns (texts keyed by the given path, problems). Bytes that are not UTF-8 are
-    replaced, not refused: the signals are ASCII, and refusing would turn every binary asset into a problem.
+# BOM -> the encodings it can mean, checked longest first (FF FE 00 00 is UTF-32 LE, or UTF-16 LE text that starts
+# with U+0000).
+_BOMS = (
+    (b"\x00\x00\xfe\xff", ("utf-32-be",)),
+    (b"\xff\xfe\x00\x00", ("utf-32-le", "utf-16-le")),
+    (b"\xfe\xff", ("utf-16-be",)),
+    (b"\xff\xfe", ("utf-16-le",)),
+)
+_WIDE = ("utf-16-le", "utf-16-be", "utf-32-le", "utf-32-be")
 
-    A file holding NUL bytes -- UTF-16 or UTF-32 text, with or without a BOM, in either byte order -- also gets its
-    bytes decoded again with every NUL removed, appended to its text. That turns the ASCII of those encodings back into
-    ASCII. The floor only adds domains, so checking both readings is the conservative direction. [review Major]"""
+
+def _readings(data: bytes):
+    """All readings of one file's bytes, and whether one of them is a reliable decoding. [V4 release hardening]
+
+    Every signal is ASCII. The UTF-8 reading (bad bytes replaced) keeps ASCII intact for UTF-8 and for every
+    ASCII-compatible legacy encoding (Big5, Shift-JIS, GBK, Latin-1, ...), so it is always included. It does not for
+    UTF-16/UTF-32, where every ASCII character carries a 0x00 byte -- so a file that can hold ASCII signals in those
+    encodings always has a NUL byte or a UTF-16/32 BOM. For such a file:
+    - with a BOM, the byte order it names is decoded after the BOM;
+    - without one, both byte orders of UTF-16 and UTF-32 are decoded, at every code-unit alignment.
+    Those readings replace bad code units, so one malformed unit cannot hide a signal elsewhere, and all of them are
+    checked together (the floor only adds domains). Such a file counts as reliably read only if a BOM-named encoding,
+    or one of the four without a BOM, decodes it strictly. If none does, the caller must not stop at NONE on it
+    (MANUAL_CHECK).
+
+    Not covered: text in an encoding that is neither ASCII-compatible nor UTF-16/32 (EBCDIC, UTF-7), and a signal
+    whose own characters are malformed."""
+    texts = [data.decode("utf-8", errors="replace")]
+    for bom, encodings in _BOMS:
+        if data.startswith(bom):
+            body = data[len(bom):]
+            reliable = False
+            for enc in encodings:
+                texts.append(body.decode(enc, errors="replace"))
+                try:
+                    body.decode(enc)
+                    reliable = True
+                except UnicodeDecodeError:
+                    pass
+            return texts, reliable
+    if b"\x00" not in data:
+        return texts, True
+    reliable = False
+    for enc in _WIDE:
+        width = 2 if enc.startswith("utf-16") else 4
+        for offset in range(width):
+            texts.append(data[offset:].decode(enc, errors="replace"))
+        try:
+            data.decode(enc)
+            reliable = True
+        except UnicodeDecodeError:
+            pass
+    return texts, reliable
+
+
+def read_scope_texts(paths: Iterable[str], root: str = ".") -> Tuple[Dict[str, str], Tuple[str, ...]]:
+    """Read each file's whole text. Returns (texts keyed by the given path, problems). A file's text is all of its
+    readings (see `_readings`) joined. A file that looks like UTF-16/32 but that no candidate decodes reliably is a
+    problem, so the gate cannot stop at NONE on it."""
     texts: Dict[str, str] = {}
     problems = []
     for p in paths:
@@ -78,10 +131,10 @@ def read_scope_texts(paths: Iterable[str], root: str = ".") -> Tuple[Dict[str, s
         except OSError as exc:
             problems.append(f"{p}: unreadable ({type(exc).__name__})")
             continue
-        text = data.decode("utf-8", errors="replace")
-        if b"\x00" in data:
-            text += "\n" + data.replace(b"\x00", b"").decode("utf-8", errors="replace")
-        texts[p] = text
+        readings, reliable = _readings(data)
+        texts[p] = "\n".join(readings)
+        if not reliable:
+            problems.append(f"{p}: cannot be decoded reliably (UTF-16/32 BOM or NUL bytes, but no candidate decodes)")
     return texts, tuple(problems)
 
 

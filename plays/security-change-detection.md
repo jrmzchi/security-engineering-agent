@@ -43,7 +43,10 @@ to `--root`, the repository under review.
   `scope_texts`. Each `unread:` line names a file the gate could not
   read: the exception's report lists it as not covered.
 - Anything else (exit 2 `MANUAL_CHECK`, other output, or the command
-  cannot run, for example no Python 3): do not stop silently. Do the
+  cannot run, for example no Python 3): do not stop silently. An
+  `unread:` line saying a file "cannot be decoded reliably" is a file
+  with UTF-16/32 marks (a BOM or NUL bytes) that no UTF-16/32 decoding
+  accepts, a binary file for example. Do the
   manual check: read those files for both halves of each pair in
   "Domains a signal pair requires". Both halves found: take the
   exception. Otherwise stop at NONE, and say in one line that the NONE

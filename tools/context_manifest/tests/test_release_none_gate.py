@@ -160,6 +160,90 @@ class DecideTests(unittest.TestCase):
             self.assertEqual(none_gate.decide(["a.cs"], root=root).action, none_gate.TARGETED_EXCEPTION)
 
 
+class UnicodeTests(unittest.TestCase):
+    """[V4 release hardening, Unicode round] UTF-16/32 byte order and BOM, non-ASCII routes, unreliable input.
+
+    The route holds characters whose UTF-16/32 code units contain 0x22 (") or 0x27 ('): U+4E22, U+2212, U+2714, U+2722.
+    Removing NULs (the previous fix) turned those into quotes and cut the route-verb pattern."""
+
+    STATE_CJK = '[HttpGet("/丢失−✔✢/delete")]\npublic IActionResult D() => Ok();\n'
+    BOMS = {"utf-16-le": b"\xff\xfe", "utf-16-be": b"\xfe\xff", "utf-32-le": b"\xff\xfe\x00\x00",
+            "utf-32-be": b"\x00\x00\xfe\xff"}
+    # no UTF-16/32 candidate decodes this strictly (lone surrogates both ways, a code point > U+10FFFF, odd length)
+    UNDECODABLE = b"\x00\xd8\x41\x00" + b"\xd8\x00\x00\x41" + b"\xff\xff\xff\xff\x01"
+
+    def action(self, data):
+        with _Scope({"a.cs": data}) as root:
+            return none_gate.decide(["a.cs"], root=root)
+
+    def test_the_cjk_route_fires_in_utf8(self):
+        self.assertEqual(self.action((AMBIENT + self.STATE_CJK).encode("utf-8")).action, none_gate.TARGETED_EXCEPTION)
+
+    def test_every_byte_order_with_and_without_bom_fires(self):
+        src = AMBIENT + self.STATE_CJK
+        for enc, bom in self.BOMS.items():
+            for prefix in (b"", bom):
+                with self.subTest(encoding=enc, bom=bool(prefix)):
+                    d = self.action(prefix + src.encode(enc))
+                    self.assertEqual(d.action, none_gate.TARGETED_EXCEPTION)
+                    self.assertEqual(d.unread, ())
+
+    def test_every_byte_order_without_the_pair_stops(self):
+        for enc, bom in self.BOMS.items():
+            for prefix in (b"", bom):
+                for name, src in (("state only", self.STATE_CJK), ("ambient only", AMBIENT),
+                                  ("text only", "// 中文 丢−\n")):
+                    with self.subTest(encoding=enc, bom=bool(prefix), case=name):
+                        self.assertEqual(self.action(prefix + src.encode(enc)).action, none_gate.STOP_NONE)
+
+    def test_a_misaligned_wide_file_still_shows_the_pair(self):
+        d = self.action(b"\x01" + (AMBIENT + self.STATE_CJK).encode("utf-16-le"))
+        self.assertEqual(d.action, none_gate.TARGETED_EXCEPTION)
+
+    def test_input_that_cannot_be_decoded_reliably_is_a_manual_check(self):
+        cases = {
+            "no BOM, NULs, no candidate decodes": self.UNDECODABLE,
+            "UTF-16 LE BOM, lone surrogate": b"\xff\xfe" + b"\x00\xd8" + "hello".encode("utf-16-le"),
+            "UTF-16 BE BOM, odd length": b"\xfe\xff" + "hi".encode("utf-16-be") + b"\x00",
+            "UTF-32 BE BOM, truncated": b"\x00\x00\xfe\xff" + b"\x00\x00\x00",
+            "UTF-32 LE BOM, code point above U+10FFFF": b"\xff\xfe\x00\x00" + b"\xff\xff\xff\xff" + b"\x01",
+            "binary with NULs": b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + bytes(range(256)) * 4,
+        }
+        for name, data in cases.items():
+            with self.subTest(case=name):
+                d = self.action(data)
+                self.assertEqual(d.action, none_gate.MANUAL_CHECK)
+                self.assertIn("cannot be decoded reliably", " ".join(d.unread))
+
+    def test_an_unreliable_file_that_still_shows_the_pair_takes_the_exception(self):
+        d = self.action(AMBIENT.encode() + STATE.encode() + self.UNDECODABLE)
+        self.assertEqual(d.action, none_gate.TARGETED_EXCEPTION)
+        self.assertIn("cannot be decoded reliably", " ".join(d.unread))
+
+    def test_ascii_compatible_legacy_encodings_keep_the_pair(self):
+        for enc in ("cp950", "gbk", "shift_jis", "latin-1"):
+            with self.subTest(encoding=enc):
+                comment = {"cp950": "// 中文\n", "gbk": "// 丢失\n", "shift_jis": "// 日本\n",
+                           "latin-1": "// café\n"}[enc]
+                d = self.action((comment + AMBIENT + STATE).encode(enc))
+                self.assertEqual(d.action, none_gate.TARGETED_EXCEPTION)
+                self.assertEqual(d.unread, ())
+
+    def test_empty_and_plain_files_stay_reliable(self):
+        for data in (b"", b"plain text\n", "﻿utf-8 with BOM\n".encode("utf-8")):
+            with self.subTest(data=data[:12]):
+                d = self.action(data)
+                self.assertEqual((d.action, d.unread), (none_gate.STOP_NONE, ()))
+
+    def test_the_cli_on_wide_and_unreliable_files(self):
+        with _Scope({"w.cs": b"\xff\xfe" + (AMBIENT + self.STATE_CJK).encode("utf-16-le"),
+                     "b.bin": self.UNDECODABLE}) as root:
+            self.assertEqual(_cli(["--root", root, "w.cs"])[0], 1)
+            code, out = _cli(["--root", root, "b.bin"])
+        self.assertEqual(code, 2)
+        self.assertTrue(any(ln.startswith("unread: b.bin: cannot be decoded reliably") for ln in out.splitlines()))
+
+
 class CallOrderTests(unittest.TestCase):
     """The real entries (decide, and `cli none-gate` on top of it) call the floor before any NONE stop."""
 
@@ -289,7 +373,8 @@ class DocumentTests(unittest.TestCase):
                        "the files it covered (and any it could not read)",
                        "Exit 0 with `STOP_NONE`: stop at NONE.",
                        "Exit 1 with `TARGETED_EXCEPTION <domain>`: take the exception above",
-                       "do not stop silently. Do the manual check",
+                       "do not stop silently. An `unread:` line saying a file \"cannot be decoded reliably\"",
+                       "a binary file for example. Do the manual check",
                        "say in one line that the NONE gate did not run, why, and what the manual check found",
                        "never a reason to skip the gate",
                        "nothing forces an agent to call it",
