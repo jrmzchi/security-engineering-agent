@@ -91,7 +91,7 @@ protocol pins. Re-exporting `6f90d0d` reproduces `812115b5…`.
 - revision 9's 52 of 52, one model run per case (`v4-release-report.md` §18);
 - it applies to that kit only. **It has not been run on this version**, and it is not evidence for it.
 
-**This version** (kit `5828991e…`), all deterministic, with no model call and no network:
+**This version** (kit `5828991e…` (superseded: the current product's kit is `cd838128…`, see `hardening-release-status.md`)), all deterministic, with no model call and no network:
 - context_manifest 325 OK (298 unchanged + 27 new); feedback_store 354 OK (2 skipped);
 - 12 mutants on the gate, the CLI and the documents, all killed;
 - consistency-check identical to the base tree (23 hits);
@@ -150,11 +150,11 @@ All of these were fixed in `634f77e`. The open question was settled as "run from
   - a mixed-encoding sweep of 37,982 files that hold the pair (random byte order, width, BOM and junk bytes between
     newline-bounded segments): **0 wrong STOP_NONE**. The same sweep finds 7,426 on `67d6d29`, so it can detect the
     fault.
-- The fix-only re-review result is recorded below.
+- **Fix-only re-review of `b4f6864`:** every earlier construction is closed and the commit adds no new code defect, but one wrong-STOP_NONE path remains: an encoding switch in the middle of a line, next to a signal. It was reproduced through the CLI. Per the user's rule, the release stops here; see `hardening-release-status.md`.
 
 ## Release validation this version still needs
 
-- **A new, pre-registered model validation on kit `5828991e…`.** The 52-case corpus plus enterprise identity, pins
+- **A new, pre-registered model validation on kit `5828991e…` (superseded: the current product's kit is `cd838128…`, see `hardening-release-status.md`).** The 52-case corpus plus enterprise identity, pins
   re-taken, before any claim that this version is release-ready.
   - The validation builds every manifest in STANDARD mode, so it never reaches the NONE path.
   - It re-checks that the guidance changes did not move any existing row.
