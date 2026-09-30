@@ -17,8 +17,10 @@ It can fire for a comment-only change to a file that already holds the pair; the
 
 What this guarantees:
 - `decide()` calls `signal_floor.required_domains()` on the texts it read before it can return STOP_NONE.
-- No failure returns STOP_NONE. An unreadable or missing file, a file that looks like UTF-16/32 but cannot be decoded
-  reliably, an empty file list, a bad argument, or an exception from
+- STOP_NONE requires, all together: every given file read, every file plain UTF-8 text (no NUL byte; the whole
+  file decodes strictly as UTF-8), `required_domains()` completed, and no domain required. Nothing else can give it.
+- No failure returns STOP_NONE. An unreadable or missing file, a file that is not plain UTF-8 (UTF-16/32, a legacy
+  encoding, a binary file), an empty file list, a bad argument, or an exception from
   the floor returns MANUAL_CHECK with the reason. When the files that could be read already require a domain, the
   result is TARGETED_EXCEPTION even if others could not be read: the unread files cannot remove a domain. The
   unread files are returned separately (`unread`, and `unread:` lines from the CLI) so the report can say so.
@@ -35,7 +37,6 @@ Nothing here prints or stores file contents. Reasons name files by the path the 
 from __future__ import annotations
 
 import os
-import re
 from collections.abc import Iterable as _Iterable
 from dataclasses import dataclass, field
 from typing import Dict, FrozenSet, Iterable, Mapping, Tuple
@@ -57,83 +58,49 @@ class NoneGateDecision:
     #                                                          produce_manifest(scope_texts=...) on the exception path
 
 
-# BOM -> the encodings it can mean, checked longest first (FF FE 00 00 is UTF-32 LE, or UTF-16 LE text that starts
-# with U+0000).
-_BOMS = (
-    (b"\x00\x00\xfe\xff", ("utf-32-be",)),
-    (b"\xff\xfe\x00\x00", ("utf-32-le", "utf-16-le")),
-    (b"\xfe\xff", ("utf-16-be",)),
-    (b"\xff\xfe", ("utf-16-le",)),
-)
 _WIDE = ("utf-16-le", "utf-16-be", "utf-32-le", "utf-32-be")
+_WIDE_LIMIT = 1024 * 1024   # bytes; above this, a file that is not plain UTF-8 gets no UTF-16/32 detection readings
 
 
-_NON_ASCII = re.compile(r"[^\x00-\x7f]")
-_WIDE_LIMIT = 1024 * 1024   # bytes; a larger file with NUL bytes is not decoded as UTF-16/32 (MANUAL_CHECK)
+def plain_utf8_problem(data: bytes):
+    """None if the bytes are plain UTF-8 text -- no NUL byte, and the whole file decodes strictly as UTF-8 (a UTF-8
+    BOM is allowed) -- else why not. Only such a file can let the gate stop at NONE. [V4 release hardening, policy]
+
+    This is the whole reliability rule, on purpose. It does not try to recognise UTF-16/32, legacy encodings or
+    binary files as "reliable": a decoder that accepts some bytes is not evidence that the file's real text was read.
+    Every other file is reported unread, so the gate returns MANUAL_CHECK (or TARGETED_EXCEPTION if a signal is
+    found anyway)."""
+    if b"\x00" in data:
+        return "not plain UTF-8 text: it contains NUL bytes"
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        return "not plain UTF-8 text: it is not valid UTF-8"
+    return None
 
 
 def _readings(data: bytes):
-    """All readings of one file's bytes, and why it cannot be relied on (None if it can). [V4 release hardening]
+    """The texts the floor searches for one file, and why the file cannot be relied on (None if it can).
 
-    Every signal is ASCII. The UTF-8 reading (bad bytes replaced) keeps ASCII intact for UTF-8 and for every
-    ASCII-compatible legacy encoding (Big5, Shift-JIS, GBK, Latin-1, ...). It does not for UTF-16/UTF-32, where every
-    ASCII character carries a 0x00 byte. So for a file that holds a NUL byte, whatever its BOM says:
-    - UTF-16 LE/BE at both code-unit alignments and UTF-32 LE/BE at all four are decoded (bad units replaced), so each
-      segment of a file whose byte order, width or alignment changes part-way -- or disagrees with its BOM -- is read
-      correctly by one of them;
-    - a UTF-16/32 BOM's own encoding(s) are decoded after it, NUL or not.
-    Every reading is also added with each non-ASCII character replaced by a space. A wrong-alignment or wrong-encoding
-    neighbour then cannot glue itself to an ASCII signal and break a `\b` boundary, and non-ASCII route text cannot
-    cut a pattern. All readings are checked together; the floor only adds domains, so extra readings can only add.
-
-    The file cannot be relied on (the caller must not stop at NONE on it, MANUAL_CHECK) when:
-    - it has a UTF-16/32 BOM that its named encoding(s) cannot decode strictly;
-    - it has NUL bytes and no BOM, and none of UTF-16 LE/BE, UTF-32 LE/BE decodes it strictly (a binary file, say);
-    - it has NUL bytes and is larger than _WIDE_LIMIT: decoding it that many ways would cost too much.
-
-    Not covered: an encoding that is neither ASCII-compatible nor UTF-16/32 (EBCDIC, UTF-7); a signal whose own
-    characters are malformed, or whose characters are split across two encodings."""
+    A plain UTF-8 file (see `plain_utf8_problem`) is read once, and that reading is the one the STOP_NONE decision
+    rests on. Any other file is unreliable, full stop. Its readings are for DETECTION only -- to take the exception
+    when a signal pair is visible anyway, never to allow STOP_NONE:
+    - UTF-8 with bad bytes replaced (keeps ASCII for ASCII-compatible legacy encodings);
+    - for a file with NUL bytes (up to _WIDE_LIMIT), UTF-16 LE/BE at both alignments and UTF-32 LE/BE at all four.
+    The floor only adds domains, so extra readings can only add."""
+    why = plain_utf8_problem(data)
     texts = [data.decode("utf-8", errors="replace")]
-    why = None
-    has_nul = b"\x00" in data
-    if has_nul and len(data) > _WIDE_LIMIT:
-        why = f"NUL bytes in a file over {_WIDE_LIMIT // (1024 * 1024)} MiB, not decoded as UTF-16/32"
-    else:
-        for bom, encodings in _BOMS:
-            if data.startswith(bom):
-                body = data[len(bom):]
-                strict = False
-                for enc in encodings:
-                    texts.append(body.decode(enc, errors="replace"))
-                    try:
-                        body.decode(enc)
-                        strict = True
-                    except UnicodeDecodeError:
-                        pass
-                if not strict:
-                    why = "UTF-16/32 BOM, but its encoding does not decode the file"
-                break
-        if has_nul:
-            strict = False
-            for enc in _WIDE:
-                width = 2 if enc.startswith("utf-16") else 4
-                for offset in range(width):
-                    texts.append(data[offset:].decode(enc, errors="replace"))
-                try:
-                    data.decode(enc)
-                    strict = True
-                except UnicodeDecodeError:
-                    pass
-            if not strict and why is None and not any(data.startswith(b) for b, _ in _BOMS):
-                why = "NUL bytes, but no UTF-16/32 decoding accepts the file"
-    texts += [y for y in (_NON_ASCII.sub(" ", x) for x in texts) if y not in texts]
+    if why is not None and b"\x00" in data and len(data) <= _WIDE_LIMIT:
+        for enc in _WIDE:
+            width = 2 if enc.startswith("utf-16") else 4
+            texts += [data[offset:].decode(enc, errors="replace") for offset in range(width)]
     return texts, why
 
 
 def read_scope_texts(paths: Iterable[str], root: str = ".") -> Tuple[Dict[str, str], Tuple[str, ...]]:
     """Read each file's whole text. Returns (texts keyed by the given path, problems). A file's text is all of its
-    readings (see `_readings`) joined. A file that looks like UTF-16/32 but that no candidate decodes reliably is a
-    problem, so the gate cannot stop at NONE on it."""
+    readings (see `_readings`) joined. Every file that is not plain UTF-8 is a problem, so the gate cannot stop at
+    NONE on it."""
     texts: Dict[str, str] = {}
     problems = []
     for p in paths:

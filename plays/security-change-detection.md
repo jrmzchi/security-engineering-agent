@@ -37,7 +37,9 @@ python -m tools.context_manifest.cli none-gate --root <repository root> <file>..
 Run it from the kit's root (where `tools/` is); the files are relative
 to `--root`, the repository under review.
 
-- Exit 0 with `STOP_NONE`: stop at NONE.
+- Exit 0 with `STOP_NONE`: stop at NONE. The gate gives this only when
+  every file was read, every file is plain UTF-8 text (no NUL byte, the
+  whole file valid UTF-8), and no signal pair was found.
 - Exit 1 with `TARGETED_EXCEPTION <domain>`: take the exception above
   for that domain. Build the manifest with the same files' texts as
   `scope_texts`. Each `unread:` line names a file the gate could not
@@ -45,12 +47,19 @@ to `--root`, the repository under review.
 - Anything else (exit 2 `MANUAL_CHECK`, other output, or the command
   cannot run, for example no Python 3): do not stop silently. An
   `unread:` line saying a file "cannot be decoded reliably" is a file
-  with UTF-16/32 marks (a BOM or NUL bytes) that no UTF-16/32 decoding
-  accepts, a binary file for example. Do the
+  that is not plain UTF-8 text: UTF-16/32, a legacy encoding, a file
+  that mixes encodings, or a binary file. Do the
   manual check: read those files for both halves of each pair in
   "Domains a signal pair requires". Both halves found: take the
-  exception. Otherwise stop at NONE, and say in one line that the NONE
-  gate did not run, why, and what the manual check found.
+  exception. Otherwise you may stop at NONE only if you had reliable
+  text for **every** file: a file the gate could not read reliably, or
+  that you could not read as text yourself, does not count as checked
+  just because you saw no signal in it. For such a file, either get its
+  real text (for example from its known encoding) and check that, or take
+  the exception's web-security review anyway, conservatively, and list
+  the file as not covered. When you do stop, say in one line that the
+  NONE gate did not permit the stop, why, and what the manual check
+  found.
 
 Noticing the pair yourself is an extra trigger for the exception, never
 a reason to skip the gate. At the pre-code classification there are no
