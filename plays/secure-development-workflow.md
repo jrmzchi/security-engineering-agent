@@ -62,7 +62,9 @@ NONE     -> stop here. No design, no review, no scanner, no summary.
             (from the kit's root: python -m tools.context_manifest.cli
             none-gate --root <repository root> <file>...). Only exit 0
             with STOP_NONE stops here; exit 1 with TARGETED_EXCEPTION
-            takes the exception; anything else means the manual check.
+            takes the exception, reviewed with the validated manifest
+            the gate prints (never a hand-written one); anything else
+            means the manual check.
             The
             exception runs the manifest's scanners for that domain
             only (an unavailable one goes to coverageGaps), validates

@@ -142,8 +142,10 @@ Final findings
    state-changing endpoint (CSRF). It adds to item 0's `domains` and
    never removes any, and a Jev candidate cannot drop it.
    **`[V4 release hardening]`** On the NONE signal-pair exception path,
-   `scope_texts` are the texts of the files the NONE gate read
-   (`tools/context_manifest/none_gate.py`), the review covers that
+   the NONE gate itself runs this step: it calls `produce_manifest()` with
+   the texts of the files it read as `scope_texts` and prints the
+   validated manifest (`manifest: <json>`). Use that manifest; do not
+   rebuild or hand-write one. The review covers that
    domain only, and it reports as `plays/security-change-detection.md`'s
    NONE action says: a finding goes through step 7 and the gate; no
    finding is one line limited to that domain.

@@ -35,8 +35,9 @@ Known misses (independent review, recorded, not added this round because they wo
   - FastAPI `Cookie`, a multi-line Flask import of `session`, lower-case Flask `methods`;
   - a route verb glued to another word (`accountDelete`).
 - A signal glued to a non-ASCII letter (a CJK character directly before `ConfigureApplicationCookie(`, or before
-  `delete` in a route): the word boundary does not hold, so that half does not match. (The NONE gate's policy round removed a projection that had hidden this for plain UTF-8 files;
-  recorded, not restored, per the round's blocking-only rule.)
+  `delete` in a route): the word boundary does not hold, so that half does not match. The NONE gate adds a
+  reading with non-ASCII characters replaced by spaces, which covers this on its path (and in the exception
+  manifest it builds); the floor's other callers pass plain texts and still miss it.
 
 Known false fires:
 - the signals inside comments;

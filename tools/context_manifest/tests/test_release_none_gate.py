@@ -11,6 +11,7 @@ none_gate.py and in plays/security-change-detection.md's NONE action.
 from __future__ import annotations
 
 import io
+import json
 import os
 import re
 import shutil
@@ -458,6 +459,9 @@ class DocumentTests(unittest.TestCase):
                        "the files it covered (and any it could not read)",
                        "Exit 0 with `STOP_NONE`: stop at NONE.",
                        "Exit 1 with `TARGETED_EXCEPTION <domain>`: take the exception above",
+                       "The gate has already built the exception's manifest with `produce_manifest()`",
+                       "**Use that manifest for the review** -- its domains, budget and scanners. Do not write, edit or rebuild a manifest by hand.",
+                       "do not stop at NONE, and do not write a manifest yourself. Review that domain by hand at the MINIMAL budget, and report that no validated manifest exists as a coverage gap.",
                        "do not stop silently. An `unread:` line saying a file \"cannot be decoded reliably\"",
                        "is a file that is not plain UTF-8 text",
                        "The gate gives this only when every file was read, every file is plain UTF-8 text",
@@ -481,8 +485,9 @@ class DocumentTests(unittest.TestCase):
         for phrase in ("run the NONE gate on the change's files",
                        "(from the kit's root: python -m tools.context_manifest.cli none-gate --root <repository "
                        "root> <file>...)",
-                       "Only exit 0 with STOP_NONE stops here; exit 1 with TARGETED_EXCEPTION takes the exception; "
-                       "anything else means the manual check.",
+                       "Only exit 0 with STOP_NONE stops here; exit 1 with TARGETED_EXCEPTION takes the exception, "
+                       "reviewed with the validated manifest the gate prints (never a hand-written one); anything else means "
+                       "the manual check.",
                        "runs the manifest's scanners for that domain only (an unavailable one goes to coverageGaps), "
                        "validates and gates a finding, and reports one line when there is none",
                        "The signal-pair exception and a NONE gate that did not run each report"):
@@ -493,7 +498,7 @@ class DocumentTests(unittest.TestCase):
         for parts, phrase in ((("skills", "security-change-detection", "SKILL.md"),
                                "stops the workflow only after the NONE gate permits it"),
                               (("skills", "security-review", "SKILL.md"),
-                               "`scope_texts` are the texts of the files the NONE gate read"),
+                               "the NONE gate itself runs this step: it calls `produce_manifest()`"),
                               (("skills", "security-review", "SKILL.md"), "no finding is one line limited to that domain"),
                               (("plays", "review-budget.md"), "which the workflow requires before any NONE stop"),
                               (("tools", "context_manifest", "signal_floor.py"),
@@ -517,6 +522,132 @@ class DocumentTests(unittest.TestCase):
         self.assertIn("NONE gate", wf_row)
         theater = self.CD[self.CD.index("## No security theater"):]
         self.assertIn("Except the signal-pair exception", theater)
+
+
+
+def _manifest_of(out):
+    lines = [ln for ln in out.splitlines() if ln.startswith("manifest: ")]
+    return json.loads(lines[-1][len("manifest: "):]) if lines else None
+
+
+class ExceptionManifestTests(unittest.TestCase):
+    """[r11] On TARGETED_EXCEPTION the gate itself builds the exception's manifest through produce_manifest() -- the
+    approved entry -- from the same texts, validates it and prints it. No hand-filled fields, no Jev."""
+
+    def test_the_cli_prints_the_validated_built_in_manifest(self):
+        with _Scope({"Startup.cs": _rv18()}) as root:
+            code, out = _cli(["--root", root, "Startup.cs"])
+        self.assertEqual((code, out.splitlines()[1]), (1, "TARGETED_EXCEPTION web-security"))
+        self.assertTrue(out.splitlines()[-1].startswith("manifest: "))
+        m = _manifest_of(out)
+        self.assertEqual((m["reviewMode"], m["sensitivity"], m["domains"], m["reviewBudget"], m["scannersSelected"]),
+                         ("TARGETED", "NONE", ["web-security"], "MINIMAL", sorted(SCANNER_DOMAIN_MAP["web-security"])))
+        self.assertEqual(m["producedBy"], "built_in")
+        self.assertIs(m["validity"]["passed"], True)
+        self.assertIs(m["degradation"]["jevAttempted"], False)
+        self.assertEqual(m["targetChange"]["files"], ["Startup.cs"])
+
+    def test_the_manifest_comes_from_produce_manifest_with_the_gates_own_texts(self):
+        with _Scope({"Startup.cs": _rv18(), "logo.png": b"\x89PNG\x00\x00"}) as root, \
+                mock.patch.object(orchestrator, "produce_manifest", wraps=orchestrator.produce_manifest) as spy:
+            decision = none_gate.decide(["Startup.cs", "logo.png"], root=root)
+            code, out = _cli(["--root", root, "Startup.cs", "logo.png"])
+        self.assertEqual(code, 1)
+        self.assertEqual(spy.call_count, 1)
+        kw = spy.call_args.kwargs
+        self.assertEqual((kw["review_mode"], kw["classification"].sensitivity, set(kw["classification"].implicated_domains)),
+                         ("TARGETED", "NONE", set()))
+        self.assertEqual(dict(kw["scope_texts"]), dict(decision.scope_texts))
+        self.assertIsNone(kw["token_provider"]())
+        self.assertIsNotNone(_manifest_of(out))
+
+    def test_no_jev_call_even_with_a_token_in_the_environment(self):
+        class _Boom:
+            def __init__(self, *a, **k):
+                raise AssertionError("Jev client constructed")
+        with _Scope({"Startup.cs": _rv18()}) as root, mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "fake-token"}), \
+                mock.patch("tools.context_manifest.jev_client.JevClient", _Boom):
+            code, out = _cli(["--root", root, "Startup.cs"])
+        self.assertEqual(code, 1)
+        self.assertEqual(_manifest_of(out)["degradation"]["jevOutcome"], "no_token")
+
+    def test_a_manifest_that_cannot_be_built_is_a_manual_check_not_a_stop(self):
+        with _Scope({"Startup.cs": _rv18()}) as root, \
+                mock.patch.object(orchestrator, "produce_manifest", side_effect=orchestrator.OrchestrationError("x")):
+            code, out = _cli(["--root", root, "Startup.cs"])
+        self.assertEqual((code, out.splitlines()[1]), (2, "MANUAL_CHECK"))
+        self.assertIsNone(_manifest_of(out))
+        self.assertIn("a signal pair requires web-security, but the manifest could not be built", out)
+        self.assertNotIn("STOP_NONE", out)
+
+    def test_a_manifest_that_fails_validation_is_never_printed(self):
+        real = orchestrator.produce_manifest
+
+        def invalid(**kw):
+            res = real(**kw)
+            res.manifest["validity"] = {"passed": False, "failedChecks": ["forced"], "checkedBy": "test"}
+            return res
+        with _Scope({"Startup.cs": _rv18()}) as root, mock.patch.object(orchestrator, "produce_manifest", side_effect=invalid):
+            code, out = _cli(["--root", root, "Startup.cs"])
+        self.assertEqual((code, out.splitlines()[1]), (2, "MANUAL_CHECK"))
+        self.assertIsNone(_manifest_of(out))
+        self.assertIn("did not pass validation", out)
+
+    def test_a_manifest_that_drops_the_domain_or_mode_is_refused(self):
+        real = orchestrator.produce_manifest
+        for name, change, why in (("domain dropped", {"domains": []}, "does not carry the gate's domains"),
+                                  ("sensitivity changed", {"sensitivity": "LOW"}, "is not a TARGETED/NONE manifest")):
+            def tampered(**kw):
+                res = real(**kw)
+                res.manifest.update(change)
+                return res
+            with self.subTest(case=name), _Scope({"Startup.cs": _rv18()}) as root, \
+                    mock.patch.object(orchestrator, "produce_manifest", side_effect=tampered):
+                code, out = _cli(["--root", root, "Startup.cs"])
+                self.assertEqual(code, 2)
+                self.assertIsNone(_manifest_of(out))
+                self.assertIn(why, out)
+
+    def test_stop_and_manual_check_print_no_manifest(self):
+        with _Scope({"a.css": "a { }\n", "w.cs": "x".encode("utf-16-le")}) as root:
+            for f, code_want in (("a.css", 0), ("w.cs", 2)):
+                code, out = _cli(["--root", root, f])
+                self.assertEqual(code, code_want)
+                self.assertIsNone(_manifest_of(out))
+
+
+class GluedNonAsciiTests(unittest.TestCase):
+    """[r11] Plain UTF-8 with a signal glued to a non-ASCII letter: the projected reading restores detection.
+    The reliability rule is untouched -- an unreliable file still never stops."""
+
+    def action(self, text):
+        with _Scope({"a.cs": text}) as root:
+            return none_gate.decide(["a.cs"], root=root)
+
+    def test_glued_positives_take_the_exception(self):
+        for name, text in (
+                ("CJK before the credential", "\u4e2dConfigureApplicationCookie(o => {});\n[HttpPost(\"x\")]\n"),
+                ("CJK before a route verb", AMBIENT + '[HttpGet("/\u4e22delete")]\n'),
+                ("accented letter before a route verb", AMBIENT + '[HttpGet("/\u00e9delete")]\n'),
+                ("CJK before app.post", "const s = require('express-session');\n\u6587app.post('/x', h);\n")):
+            with self.subTest(case=name):
+                d = self.action(text)
+                self.assertEqual((d.action, d.unread), (none_gate.TARGETED_EXCEPTION, ()))
+
+    def test_glued_negatives_still_stop(self):
+        for name, text in (("text only", "// \u4e2d\u6587\u8a3b\u89e3 \u4e22\n"),
+                           ("glued credential only", "\u4e2dConfigureApplicationCookie(o => {});\n"),
+                           ("glued route only", '[HttpGet("/\u4e22delete")]\n'),
+                           ("non-ASCII word that is not a verb", AMBIENT + '[HttpGet("/\u4e22profile")]\n')):
+            with self.subTest(case=name):
+                self.assertEqual(self.action(text).action, none_gate.STOP_NONE)
+
+    def test_the_projection_does_not_relax_reliability(self):
+        # a glued pair inside UTF-16 is found (exception) but the file is still unread; without a pair it is a manual check
+        d = self.action(("\u4e2dConfigureApplicationCookie(o => {});\n[HttpPost(\"x\")]\n").encode("utf-16-le"))
+        self.assertEqual(d.action, none_gate.TARGETED_EXCEPTION)
+        self.assertTrue(d.unread)
+        self.assertEqual(self.action("\u4e2d\n".encode("utf-16-le")).action, none_gate.MANUAL_CHECK)
 
 
 if __name__ == "__main__":

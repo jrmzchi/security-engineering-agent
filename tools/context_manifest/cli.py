@@ -28,7 +28,10 @@ change stops at NONE, on the change's files. Its exit codes follow the
 same shape:
     0   STOP_NONE -- no signal pair; the NONE stop stands.
     1   TARGETED_EXCEPTION -- a signal pair requires a domain; review it
-        (plays/secure-development-workflow.md's NONE row).
+        (plays/secure-development-workflow.md's NONE row). A last
+        `manifest: <json>` line carries the exception's manifest, built by
+        produce_manifest() from the same file texts and validated. If it
+        cannot be built or validated, the result is MANUAL_CHECK instead.
     2   MANUAL_CHECK -- the gate could not decide (a file unreadable, no
         files given, or the check failed); do the manual check instead.
 Only exit 0 permits the NONE stop. It prints no file contents. Each
@@ -89,16 +92,26 @@ def _none_gate(args) -> int:
             return 2
         root, args = args[1], args[2:]
     decision = none_gate.decide(args, root=root)
+    action, reasons, manifest = decision.action, list(decision.reasons), None
+    if action == none_gate.TARGETED_EXCEPTION:
+        # [r11] The gate builds and validates the exception's manifest itself; if it cannot, the exception is not
+        # reported as ready -- MANUAL_CHECK, never a hand-written manifest and never a NONE stop.
+        manifest, why = none_gate.exception_manifest(decision, args)
+        if manifest is None:
+            action = none_gate.MANUAL_CHECK
+            reasons.append(f"a signal pair requires {', '.join(sorted(decision.domains))}, but {why}")
     print("NONE_GATE")
-    if decision.action == none_gate.TARGETED_EXCEPTION:
-        print(f"{decision.action} {' '.join(sorted(decision.domains))}")
+    if action == none_gate.TARGETED_EXCEPTION:
+        print(f"{action} {' '.join(sorted(decision.domains))}")
     else:
-        print(decision.action)
-    for reason in decision.reasons:
+        print(action)
+    for reason in reasons:
         print(f"reason: {reason}")
     for item in decision.unread:
         print(f"unread: {item}")
-    return {none_gate.STOP_NONE: 0, none_gate.TARGETED_EXCEPTION: 1}.get(decision.action, 2)
+    if manifest is not None:
+        print(f"manifest: {none_gate.manifest_line(manifest)}")
+    return {none_gate.STOP_NONE: 0, none_gate.TARGETED_EXCEPTION: 1}.get(action, 2)
 
 
 _COMMANDS = {

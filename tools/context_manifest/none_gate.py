@@ -36,7 +36,9 @@ Nothing here prints or stores file contents. Reasons name files by the path the 
 
 from __future__ import annotations
 
+import json
 import os
+import re
 from collections.abc import Iterable as _Iterable
 from dataclasses import dataclass, field
 from typing import Dict, FrozenSet, Iterable, Mapping, Tuple
@@ -59,6 +61,7 @@ class NoneGateDecision:
 
 
 _WIDE = ("utf-16-le", "utf-16-be", "utf-32-le", "utf-32-be")
+_NON_ASCII = re.compile(r"[^\x00-\x7f]")
 _WIDE_LIMIT = 1024 * 1024   # bytes; above this, a file that is not plain UTF-8 gets no UTF-16/32 detection readings
 
 
@@ -90,13 +93,17 @@ def _readings(data: bytes):
     when a signal pair is visible anyway, never to allow STOP_NONE:
     - UTF-8 with bad bytes replaced (keeps ASCII for ASCII-compatible legacy encodings);
     - for a file with NUL bytes (up to _WIDE_LIMIT), UTF-16 LE/BE at both alignments and UTF-32 LE/BE at all four.
-    The floor only adds domains, so extra readings can only add."""
+    Every reading, plain files' included, is also added with each non-ASCII character replaced by a space, so a
+    signal glued to a non-ASCII letter (a CJK character right before `ConfigureApplicationCookie(`) still matches.
+    Readings never decide reliability: that is `plain_utf8_problem` alone. The floor only adds domains, so extra
+    readings can only add."""
     why = plain_utf8_problem(data)
     texts = [data.decode("utf-8", errors="replace")]
     if why is not None and b"\x00" in data and len(data) <= _WIDE_LIMIT:
         for enc in _WIDE:
             width = 2 if enc.startswith("utf-16") else 4
             texts += [data[offset:].decode(enc, errors="replace") for offset in range(width)]
+    texts += [y for y in (_NON_ASCII.sub(" ", x) for x in texts) if y not in texts]
     return texts, why
 
 
@@ -155,3 +162,46 @@ def decide(paths: Iterable[str], root: str = ".") -> NoneGateDecision:
         return NoneGateDecision(MANUAL_CHECK, reasons=("some given files could not be read",), unread=problems,
                                 scope_texts=texts)
     return NoneGateDecision(STOP_NONE, reasons=floor.reasons, scope_texts=texts)
+
+
+def exception_manifest(decision: NoneGateDecision, target_files: Iterable[str]):
+    """The signal-pair exception's manifest, built by the approved entry and validated. [V4 release hardening, r11]
+
+    Calls `orchestrator.produce_manifest()` in TARGETED mode with item 0's NONE classification and the SAME file
+    texts the gate read as `scope_texts`, so the signal floor adds the domain exactly as it did for the gate. No token
+    is offered, so no Jev call is made and the built-in producer runs. Nothing is filled in by hand.
+
+    Returns (manifest, None) when the manifest passed the validator and carries the gate's domains, else (None, why).
+    A caller must never replace a failed manifest with a hand-written one."""
+    if decision.action != TARGETED_EXCEPTION:
+        return None, "no signal-pair exception"
+    try:
+        from . import orchestrator
+        from .validator import Classification
+        res = orchestrator.produce_manifest(
+            review_mode="TARGETED",
+            classification=Classification(sensitivity="NONE", implicated_domains=frozenset()),
+            target_change_files=list(target_files),
+            scope_texts=decision.scope_texts,
+            token_provider=lambda: None,
+        )
+    except Exception as exc:  # noqa: BLE001 -- a manifest that could not be built is never replaced by a guess
+        return None, f"the manifest could not be built ({type(exc).__name__})"
+    m = res.manifest
+    problems = []
+    if res.produced_by != "built_in" or res.audit.get("jev_called"):
+        problems.append("not the built-in producer")
+    if not (isinstance(m.get("validity"), dict) and m["validity"].get("passed") is True):
+        problems.append("did not pass validation")
+    if not set(decision.domains) <= set(m.get("domains") or ()):
+        problems.append("does not carry the gate's domains")
+    if m.get("reviewMode") != "TARGETED" or m.get("sensitivity") != "NONE":
+        problems.append("is not a TARGETED/NONE manifest")
+    if problems:
+        return None, "the manifest " + "; ".join(problems)
+    return m, None
+
+
+def manifest_line(manifest) -> str:
+    """One line, as the CLI prints it after `manifest: `. Canonical JSON (sorted keys) of the validated manifest."""
+    return json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=True)

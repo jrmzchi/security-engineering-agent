@@ -41,9 +41,18 @@ to `--root`, the repository under review.
   every file was read, every file is plain UTF-8 text (no NUL byte, the
   whole file valid UTF-8), and no signal pair was found.
 - Exit 1 with `TARGETED_EXCEPTION <domain>`: take the exception above
-  for that domain. Build the manifest with the same files' texts as
-  `scope_texts`. Each `unread:` line names a file the gate could not
-  read: the exception's report lists it as not covered.
+  for that domain. The gate has already built the exception's manifest
+  with `produce_manifest()` (the same files' texts as `scope_texts`, the
+  built-in producer, no Jev) and validated it: it is the last line,
+  `manifest: <json>`. **Use that manifest for the review** -- its
+  domains, budget and scanners. Do not write, edit or rebuild a manifest
+  by hand. Each `unread:` line names a file the gate could not read: the
+  exception's report lists it as not covered.
+- If the gate reports that a signal pair requires a domain but the
+  exception's manifest could not be built or validated (exit 2
+  `MANUAL_CHECK` with that reason): do not stop at NONE, and do not write
+  a manifest yourself. Review that domain by hand at the MINIMAL budget,
+  and report that no validated manifest exists as a coverage gap.
 - Anything else (exit 2 `MANUAL_CHECK`, other output, or the command
   cannot run, for example no Python 3): do not stop silently. An
   `unread:` line saying a file "cannot be decoded reliably" is a file
