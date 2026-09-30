@@ -130,13 +130,30 @@ class DecideTests(unittest.TestCase):
         with _Scope({"a.cs": "x"}) as root, mock.patch("builtins.open", side_effect=PermissionError("denied")):
             d = none_gate.decide(["a.cs"], root=root)
         self.assertEqual(d.action, none_gate.MANUAL_CHECK)
-        self.assertIn("PermissionError", " ".join(d.reasons))
+        self.assertIn("PermissionError", " ".join(d.unread))
 
     def test_readable_files_that_require_a_domain_win_over_unreadable_ones(self):
         with _Scope({"Startup.cs": _rv18()}) as root:
             d = none_gate.decide(["Startup.cs", "gone.cs"], root=root)
         self.assertEqual(d.action, none_gate.TARGETED_EXCEPTION)
-        self.assertTrue(any("gone.cs" in r for r in d.reasons))
+        self.assertEqual(len(d.unread), 1)
+        self.assertIn("gone.cs", d.unread[0])
+        self.assertFalse(any("gone.cs" in r for r in d.reasons))
+
+    def test_utf16_and_utf32_text_does_not_hide_the_pair(self):
+        # review Major: these encodings put NULs between ASCII characters
+        src = AMBIENT + STATE
+        for enc in ("utf-16", "utf-16-le", "utf-16-be", "utf-32", "utf-32-le", "utf-32-be", "utf-8-sig"):
+            with self.subTest(encoding=enc), _Scope({"a.cs": src.encode(enc)}) as root:
+                self.assertEqual(none_gate.decide(["a.cs"], root=root).action, none_gate.TARGETED_EXCEPTION)
+        for enc in ("utf-16", "utf-32"):
+            with self.subTest(encoding=enc, half="ambient only"), _Scope({"a.cs": AMBIENT.encode(enc)}) as root:
+                self.assertEqual(none_gate.decide(["a.cs"], root=root).action, none_gate.STOP_NONE)
+
+    def test_the_whole_file_is_read(self):
+        # review Minor: a signal after a large prefix must still be seen
+        with _Scope({"a.cs": "// x\n" * 400000 + AMBIENT + STATE}) as root:
+            self.assertEqual(none_gate.decide(["a.cs"], root=root).action, none_gate.TARGETED_EXCEPTION)
 
     def test_non_utf8_bytes_do_not_hide_the_pair(self):
         with _Scope({"a.cs": b"\xff\xfe\x80 " + AMBIENT.encode() + b"\x81" + STATE.encode()}) as root:
@@ -194,6 +211,16 @@ class CliTests(unittest.TestCase):
         self.assertEqual(_cli([])[0], 2)
         self.assertEqual(_cli(["--root"])[0], 2)
         self.assertEqual(_cli(["-h"])[0], 2)          # no help screen that exits 0
+
+    def test_unread_files_get_their_own_lines(self):
+        with _Scope({"Startup.cs": _rv18()}) as root:
+            code, out = _cli(["--root", root, "Startup.cs", "gone.cs"])
+            self.assertEqual(code, 1)
+            self.assertIn("unread: gone.cs: not found or not a regular file", out.splitlines())
+            self.assertFalse(any(ln.startswith("reason:") and "gone.cs" in ln for ln in out.splitlines()))
+            code, out = _cli(["--root", root, "gone.cs"])
+            self.assertEqual(code, 2)
+            self.assertIn("unread: gone.cs: not found or not a regular file", out.splitlines())
 
     def test_no_file_content_is_printed(self):
         text = AMBIENT + STATE + "// " + MARKER + "\n"
@@ -256,7 +283,10 @@ class DocumentTests(unittest.TestCase):
 
     def test_change_detection_is_the_full_rule(self):
         for phrase in ("Run the NONE gate before stopping.",
-                       "python -m tools.context_manifest.cli none-gate <file>...",
+                       "python -m tools.context_manifest.cli none-gate --root <repository root> <file>...",
+                       "Run it from the kit's root (where `tools/` is)",
+                       "Each `unread:` line names a file the gate could not read",
+                       "the files it covered (and any it could not read)",
                        "Exit 0 with `STOP_NONE`: stop at NONE.",
                        "Exit 1 with `TARGETED_EXCEPTION <domain>`: take the exception above",
                        "do not stop silently. Do the manual check",
@@ -274,9 +304,10 @@ class DocumentTests(unittest.TestCase):
 
     def test_the_workflow_row_says_the_same(self):
         for phrase in ("run the NONE gate on the change's files",
-                       "(python -m tools.context_manifest.cli none-gate <file>...)",
-                       "Only exit 0 (STOP_NONE) stops here; exit 1 takes the exception; anything else means the "
-                       "manual check.",
+                       "(from the kit's root: python -m tools.context_manifest.cli none-gate --root <repository "
+                       "root> <file>...)",
+                       "Only exit 0 with STOP_NONE stops here; exit 1 with TARGETED_EXCEPTION takes the exception; "
+                       "anything else means the manual check.",
                        "runs the manifest's scanners for that domain only (an unavailable one goes to coverageGaps), "
                        "validates and gates a finding, and reports one line when there is none",
                        "The signal-pair exception and a NONE gate that did not run each report"):
@@ -289,7 +320,10 @@ class DocumentTests(unittest.TestCase):
                               (("skills", "security-review", "SKILL.md"),
                                "`scope_texts` are the texts of the files the NONE gate read"),
                               (("skills", "security-review", "SKILL.md"), "no finding is one line limited to that domain"),
-                              (("plays", "review-budget.md"), "is reached through the NONE gate"),
+                              (("plays", "review-budget.md"), "which the workflow requires before any NONE stop"),
+                              (("tools", "context_manifest", "signal_floor.py"),
+                               "which the workflow requires before any NONE stop"),
+                              (("tools", "README.md"), "`none-gate` is run by the reviewing agent before a NONE stop"),
                               (("AGENTS.md",), "NONE stops only after the NONE gate permits it"),
                               (("CLAUDE.md",), "checked by its NONE gate"),
                               (("integrations", "claude", "agents", "security-change-detection.md"),

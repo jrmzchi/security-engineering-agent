@@ -19,7 +19,8 @@ What this guarantees:
 - `decide()` calls `signal_floor.required_domains()` on the texts it read before it can return STOP_NONE.
 - No failure returns STOP_NONE. An unreadable or missing file, an empty file list, a bad argument, or an exception from
   the floor returns MANUAL_CHECK with the reason. When the files that could be read already require a domain, the
-  result is TARGETED_EXCEPTION even if others could not be read: the unread files cannot remove a domain.
+  result is TARGETED_EXCEPTION even if others could not be read: the unread files cannot remove a domain. The
+  unread files are returned separately (`unread`, and `unread:` lines from the CLI) so the report can say so.
 - The CLI exits 0 only for STOP_NONE. Any other exit -- including Python's own exit 1 for an interpreter that cannot
   import this package -- means "do not stop at NONE".
 
@@ -48,14 +49,19 @@ MANUAL_CHECK = "MANUAL_CHECK"
 class NoneGateDecision:
     action: str                                              # STOP_NONE | TARGETED_EXCEPTION | MANUAL_CHECK
     domains: FrozenSet[str] = frozenset()                    # the domains the exception reviews
-    reasons: Tuple[str, ...] = ()                            # why; for MANUAL_CHECK, what could not be checked
+    reasons: Tuple[str, ...] = ()                            # why
+    unread: Tuple[str, ...] = ()                             # given files the gate could not read, and why
     scope_texts: Mapping[str, str] = field(default_factory=dict)  # the texts checked: pass the same to
     #                                                          produce_manifest(scope_texts=...) on the exception path
 
 
 def read_scope_texts(paths: Iterable[str], root: str = ".") -> Tuple[Dict[str, str], Tuple[str, ...]]:
     """Read each file's whole text. Returns (texts keyed by the given path, problems). Bytes that are not UTF-8 are
-    replaced, not refused: the signals are ASCII, and refusing would turn every binary asset into a problem."""
+    replaced, not refused: the signals are ASCII, and refusing would turn every binary asset into a problem.
+
+    A file holding NUL bytes -- UTF-16 or UTF-32 text, with or without a BOM, in either byte order -- also gets its
+    bytes decoded again with every NUL removed, appended to its text. That turns the ASCII of those encodings back into
+    ASCII. The floor only adds domains, so checking both readings is the conservative direction. [review Major]"""
     texts: Dict[str, str] = {}
     problems = []
     for p in paths:
@@ -72,7 +78,10 @@ def read_scope_texts(paths: Iterable[str], root: str = ".") -> Tuple[Dict[str, s
         except OSError as exc:
             problems.append(f"{p}: unreadable ({type(exc).__name__})")
             continue
-        texts[p] = data.decode("utf-8", errors="replace")
+        text = data.decode("utf-8", errors="replace")
+        if b"\x00" in data:
+            text += "\n" + data.replace(b"\x00", b"").decode("utf-8", errors="replace")
+        texts[p] = text
     return texts, tuple(problems)
 
 
@@ -93,11 +102,14 @@ def decide(paths: Iterable[str], root: str = ".") -> NoneGateDecision:
     try:
         floor = signal_floor.required_domains(texts)
     except Exception as exc:  # noqa: BLE001
-        return NoneGateDecision(MANUAL_CHECK, reasons=(f"the signal floor raised {type(exc).__name__}",) + problems,
-                                scope_texts=texts)
+        return NoneGateDecision(MANUAL_CHECK, reasons=(f"the signal floor raised {type(exc).__name__}",),
+                                unread=problems, scope_texts=texts)
     if floor.domains:
-        return NoneGateDecision(TARGETED_EXCEPTION, domains=floor.domains, reasons=floor.reasons + problems,
+        # The unread files cannot remove a domain today (one rule, add-only). They are reported, not dropped: the
+        # exception's report lists them as not covered. Re-check this branch if the floor ever gains a second rule.
+        return NoneGateDecision(TARGETED_EXCEPTION, domains=floor.domains, reasons=floor.reasons, unread=problems,
                                 scope_texts=texts)
     if problems:
-        return NoneGateDecision(MANUAL_CHECK, reasons=problems, scope_texts=texts)
+        return NoneGateDecision(MANUAL_CHECK, reasons=("some given files could not be read",), unread=problems,
+                                scope_texts=texts)
     return NoneGateDecision(STOP_NONE, reasons=floor.reasons, scope_texts=texts)

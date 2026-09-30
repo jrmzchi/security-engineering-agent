@@ -190,14 +190,15 @@ ecosystem-driven `python`/`pip`/`pip-audit` checks, and
 rather than silently skipping the `SCOPE_COVERAGE` category when no
 working interpreter is found on PATH.
 
-Entry point (consistency-check only): `python -m
-tools.context_manifest.cli <command>` — see `cli.py`'s own docstring
-for the current command list and exit codes.
+Entry point: `python -m tools.context_manifest.cli <command>` — see
+`cli.py`'s own docstring for the current command list and exit codes.
+`scope-coverage-check` has two callers,
 `scripts/windows/consistency-check.ps1` and
-`scripts/macos/consistency-check.sh` are the only two callers of that
-CLI; both invoke this exact entry point as a subprocess and relay its
-output/exit code rather than reimplementing any of its logic — see
-`scope_coverage.py`'s module docstring for why.
+`scripts/macos/consistency-check.sh`; both invoke this exact entry point
+as a subprocess and relay its output/exit code rather than reimplementing
+any of its logic — see `scope_coverage.py`'s module docstring for why.
+`[V4 release hardening]` `none-gate` is run by the reviewing agent before
+a NONE stop (`plays/security-change-detection.md`'s NONE action).
 
 Modules (the reviewing agent imports and calls these directly, per
 `skills/security-review`'s own `[V4 Batch 0]` notes -- like every other

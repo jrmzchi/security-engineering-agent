@@ -26,18 +26,22 @@ it confirms nothing.
 
 **`[V4 release hardening]` Run the NONE gate before stopping.** A NONE
 classification of the actual diff does not stop the workflow by
-itself. First run, from the repository root, on the change's files (the
+itself. First run the gate on the change's files (the
 files the diff touches as they are after it, untracked files included,
 deleted files left out; whole files, not the diff):
 
 ```text
-python -m tools.context_manifest.cli none-gate <file>...
+python -m tools.context_manifest.cli none-gate --root <repository root> <file>...
 ```
+
+Run it from the kit's root (where `tools/` is); the files are relative
+to `--root`, the repository under review.
 
 - Exit 0 with `STOP_NONE`: stop at NONE.
 - Exit 1 with `TARGETED_EXCEPTION <domain>`: take the exception above
   for that domain. Build the manifest with the same files' texts as
-  `scope_texts`.
+  `scope_texts`. Each `unread:` line names a file the gate could not
+  read: the exception's report lists it as not covered.
 - Anything else (exit 2 `MANUAL_CHECK`, other output, or the command
   cannot run, for example no Python 3): do not stop silently. Do the
   manual check: read those files for both halves of each pair in
@@ -61,8 +65,8 @@ call it: this step is where it is required.
 - a finding is validated (`plays/finding-validation.md`), goes through
   `skills/security-gate`, and is reported like any other finding;
 - no finding: one line naming the check (the signal-pair exception and
-  its domain), the files it covered and the result, with any
-  `coverageGaps`. Say nothing about other domains: the change was not
+  its domain), the files it covered (and any it could not read) and the
+  result, with any `coverageGaps`. Say nothing about other domains: the change was not
   reviewed for them.
 
 ### LOW

@@ -386,7 +386,8 @@ credential and a state-changing endpoint, `tools/context_manifest/signal_floor.p
 `NONE` classification. The manifest then carries that domain at the NONE row's `MINIMAL` budget, and the review of it
 is live: its play is read (`skills/security-review/SKILL.md` step 5). The floor only adds the domain; it confirms
 nothing. A `NONE` change without both signals still has no live review. `[V4 release hardening]` The exception
-is reached through the NONE gate (`tools/context_manifest/none_gate.py`), which runs before any NONE stop; what the
+is reached through the NONE gate (`tools/context_manifest/none_gate.py`), which the workflow requires before any
+NONE stop; what the
 exception runs and reports: `plays/security-change-detection.md`'s NONE action.
 
 ### Explicit mode: starting point and movement cap (QUICK/STANDARD/DEEP)

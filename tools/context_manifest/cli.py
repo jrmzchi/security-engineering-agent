@@ -9,6 +9,8 @@ mechanism exists to prevent).
 Usage:
     python -m tools.context_manifest.cli scope-coverage-check
     python -m tools.context_manifest.cli none-gate [--root DIR] FILE...
+    (run from the kit's root; FILE paths are relative to DIR, the
+    repository under review)
 
 Exit codes (matching scripts/*/consistency-check.*'s existing
 convention):
@@ -29,7 +31,9 @@ same shape:
         (plays/secure-development-workflow.md's NONE row).
     2   MANUAL_CHECK -- the gate could not decide (a file unreadable, no
         files given, or the check failed); do the manual check instead.
-Only exit 0 permits the NONE stop. It prints no file contents.
+Only exit 0 permits the NONE stop. It prints no file contents. Each
+`unread: <path>: <why>` line names a given file the gate could not read.
+
 """
 
 from __future__ import annotations
@@ -92,6 +96,8 @@ def _none_gate(args) -> int:
         print(decision.action)
     for reason in decision.reasons:
         print(f"reason: {reason}")
+    for item in decision.unread:
+        print(f"unread: {item}")
     return {none_gate.STOP_NONE: 0, none_gate.TARGETED_EXCEPTION: 1}.get(decision.action, 2)
 
 

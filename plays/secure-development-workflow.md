@@ -59,9 +59,11 @@ NONE     -> stop here. No design, no review, no scanner, no summary.
             the manifest as TARGETED and review web-security only (read
             its play), at the MINIMAL budget. No design step.
             Before stopping, run the NONE gate on the change's files
-            (python -m tools.context_manifest.cli none-gate <file>...).
-            Only exit 0 (STOP_NONE) stops here; exit 1 takes the
-            exception; anything else means the manual check. The
+            (from the kit's root: python -m tools.context_manifest.cli
+            none-gate --root <repository root> <file>...). Only exit 0
+            with STOP_NONE stops here; exit 1 with TARGETED_EXCEPTION
+            takes the exception; anything else means the manual check.
+            The
             exception runs the manifest's scanners for that domain
             only (an unavailable one goes to coverageGaps), validates
             and gates a finding, and reports one line when there is
